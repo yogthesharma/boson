@@ -1,0 +1,4 @@
+(function () {
+  var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.classList.toggle("dark", dark);
+})();
