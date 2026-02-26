@@ -1,7 +1,40 @@
 import { useState } from "react";
 import { IconCheck, IconCopy, IconLoader2 } from "@tabler/icons-react";
+import { Highlight, themes, Prism } from "prism-react-renderer";
 import { toast } from "sonner";
+
+// Must run before prismjs component imports so they register on prism-react-renderer's Prism
+import "./prism-init";
+import "prismjs/components/prism-javascript";
+import "prismjs/components/prism-typescript";
+import "prismjs/components/prism-jsx";
+import "prismjs/components/prism-tsx";
+import "prismjs/components/prism-json";
+import "prismjs/components/prism-bash";
+import "prismjs/components/prism-css";
+import "prismjs/components/prism-markup";
+import "prismjs/components/prism-scss";
+import "prismjs/components/prism-markdown";
+import "prismjs/components/prism-python";
 import { cn } from "@/lib/utils";
+
+// Prism language alias for fence label (e.g. "js" -> "javascript")
+const PRISM_LANG_ALIAS = {
+  js: "javascript",
+  ts: "typescript",
+  jsx: "jsx",
+  tsx: "tsx",
+  py: "python",
+  sh: "bash",
+  bash: "bash",
+  zsh: "bash",
+  json: "json",
+  html: "markup",
+  xml: "markup",
+  css: "css",
+  scss: "scss",
+  md: "markdown",
+};
 
 /** Extract and parse JSON from ```json ... ``` block in content. Returns null if not found or invalid. */
 function parseStructuredContent(content) {
@@ -62,7 +95,7 @@ function renderInlineFormatted(parts) {
       </code>
     ) : (
       <strong key={i}>{part.value}</strong>
-    )
+    ),
   );
 }
 
@@ -135,33 +168,105 @@ function parseBlocks(content) {
   return blocks;
 }
 
+/** Theme-aware Prism theme (dark vs light). */
+function getPrismTheme() {
+  if (typeof document === "undefined") return themes.oneDark;
+  return document.documentElement.classList.contains("dark")
+    ? themes.oneDark
+    : themes.oneLight;
+}
+
+/** Code block with header row (language + copy) and syntax highlighting. */
+function CodeBlock({ block, blockIndex }) {
+  const [copied, setCopied] = useState(false);
+  const lang = (block.language || "").toLowerCase();
+  const prismLang =
+    PRISM_LANG_ALIAS[lang] || (Prism.languages[lang] ? lang : "plaintext");
+
+  const handleCopyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(block.value);
+      setCopied(true);
+      toast.success("Code copied to clipboard");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Failed to copy code");
+    }
+  };
+
+  return (
+    <div
+      key={blockIndex}
+      className="my-3 overflow-hidden rounded-md bg-muted/50"
+    >
+      <div className="flex items-center justify-between px-3 py-1.5 pb-0">
+        <span className="text-xs font-medium text-muted-foreground">
+          {block.language || "code"}
+        </span>
+        <button
+          type="button"
+          onClick={handleCopyCode}
+          className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus:outline-none"
+          title={copied ? "Copied" : "Copy code"}
+          aria-label={copied ? "Copied" : "Copy code"}
+        >
+          {copied ? (
+            <IconCheck size={14} stroke={2} />
+          ) : (
+            <IconCopy size={14} stroke={1.5} />
+          )}
+        </button>
+      </div>
+      <Highlight
+        theme={getPrismTheme()}
+        code={block.value}
+        language={prismLang}
+      >
+        {({ className, style, tokens, getLineProps, getTokenProps }) => (
+          <pre
+            className={cn(
+              "overflow-x-auto p-3 pt-2 text-xs leading-relaxed font-mono whitespace-pre",
+              className,
+            )}
+            style={{
+              ...style,
+              fontFamily: "var(--code-font, ui-monospace, monospace)",
+              margin: 0,
+              background: "transparent",
+            }}
+          >
+            {tokens.map((line, i) => (
+              <div key={i} {...getLineProps({ line })}>
+                {line.map((token, key) => (
+                  <span key={key} {...getTokenProps({ token })} />
+                ))}
+              </div>
+            ))}
+          </pre>
+        )}
+      </Highlight>
+    </div>
+  );
+}
+
 /** Render a single block (code, table, or para with inline formatting). */
 function renderBlock(block, blockIndex) {
   if (block.type === "code") {
-    return (
-      <div key={blockIndex} className="my-2 overflow-hidden rounded-md border border-border bg-muted/50">
-        {block.language && (
-          <div className="border-b border-border px-3 py-1 text-xs text-muted-foreground font-medium">
-            {block.language}
-          </div>
-        )}
-        <pre className="overflow-x-auto p-3 text-xs leading-relaxed font-mono whitespace-pre break-words" style={{ fontFamily: "var(--code-font, ui-monospace, monospace)" }}>
-          <code>{block.value}</code>
-        </pre>
-      </div>
-    );
+    return <CodeBlock key={blockIndex} block={block} blockIndex={blockIndex} />;
   }
   if (block.type === "table") {
     const rows = block.rows;
-    const isSeparator = (row) =>
-      row.every((c) => /^[\s\-:]+$/.test(c));
+    const isSeparator = (row) => row.every((c) => /^[\s\-:]+$/.test(c));
     const headerRow = rows[0];
     const sepIndex = rows.findIndex((r, i) => i > 0 && isSeparator(r));
     const bodyStart = sepIndex >= 0 ? sepIndex + 1 : 1;
     const bodyRows = headerRow ? rows.slice(bodyStart) : rows;
     const hasHeader = headerRow && bodyRows.length > 0 && sepIndex >= 0;
     return (
-      <div key={blockIndex} className="my-2 overflow-x-auto rounded-md border border-border">
+      <div
+        key={blockIndex}
+        className="my-2 overflow-x-auto rounded-md border border-border"
+      >
         <table className="w-full min-w-[200px] border-collapse text-sm">
           {hasHeader && (
             <thead>
@@ -209,7 +314,10 @@ function renderBlock(block, blockIndex) {
   }
   if (block.type === "list") {
     return (
-      <ul key={blockIndex} className="list-disc list-inside space-y-0.5 pl-1 my-1">
+      <ul
+        key={blockIndex}
+        className="list-disc list-inside space-y-0.5 pl-1 my-1"
+      >
         {block.items.map((item, j) => (
           <li key={j}>{renderInlineFormatted(formatContent(item))}</li>
         ))}
@@ -221,7 +329,8 @@ function renderBlock(block, blockIndex) {
 
 /** Render answer_markdown with code blocks, tables, lists, and inline formatting. */
 function StructuredSections({ data }) {
-  const answer = data.answer_markdown != null ? String(data.answer_markdown).trim() : "";
+  const answer =
+    data.answer_markdown != null ? String(data.answer_markdown).trim() : "";
   if (!answer) return null;
   const blocks = parseBlocks(answer);
   return (
@@ -233,7 +342,8 @@ function StructuredSections({ data }) {
 
 function phaseLabel(phase, toolName) {
   if (phase === "thinking") return "Thinking...";
-  if (phase === "calling_tool") return toolName ? `Using tool: ${toolName}` : "Using tool...";
+  if (phase === "calling_tool")
+    return toolName ? `Using tool: ${toolName}` : "Using tool...";
   if (phase === "writing") return "Writing response...";
   return null;
 }
@@ -261,11 +371,13 @@ export function ChatMessage({ role, content, messageId, meta }) {
     }
   };
 
-  const structured = !isUser && content ? parseStructuredContent(content) : null;
+  const structured =
+    !isUser && content ? parseStructuredContent(content) : null;
   const hasStructuredShape =
     structured &&
     typeof structured === "object" &&
-    (structured.answer_markdown != null && String(structured.answer_markdown).trim());
+    structured.answer_markdown != null &&
+    String(structured.answer_markdown).trim();
 
   return (
     <div
@@ -279,7 +391,7 @@ export function ChatMessage({ role, content, messageId, meta }) {
       )}
       <div
         className={cn(
-          "max-w-[85%] rounded-lg px-4 py-2.5 text-sm",
+          "max-w-full rounded-lg px-4 py-2.5 text-sm",
           isUser
             ? "bg-muted text-foreground"
             : "bg-transparent text-foreground",
