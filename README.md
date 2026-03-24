@@ -19,6 +19,14 @@ The goal is simple: developers should be able to use powerful coding operators w
 - Status bar telemetry (line/column, encoding, EOL, language).
 - Tauri desktop runtime with file system and dialog integrations.
 
+## Current Progress
+
+- Workbench foundation is implemented and usable end-to-end.
+- Explorer/Open Editors parity is partially complete, with rich context and rename flows in place.
+- Bottom panel and status bar are mature for daily use, including persistence and editor telemetry.
+- Extension contribution model (views, status bar, titlebar, commands) is active and extensible.
+- AI operator layer is currently in planning/design docs and is the next major build phase.
+
 ## Quick Start
 
 ### Prerequisites
