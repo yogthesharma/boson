@@ -224,8 +224,7 @@ function fileIconClass(name: string): string {
     return "text-violet-600 dark:text-violet-400";
   if (lower.endsWith(".css") || lower.endsWith(".scss"))
     return "text-pink-600 dark:text-pink-400";
-  if (lower.endsWith(".rs"))
-    return "text-orange-600 dark:text-orange-400";
+  if (lower.endsWith(".rs")) return "text-orange-600 dark:text-orange-400";
   if (lower.endsWith(".html") || lower.endsWith(".htm"))
     return "text-orange-500 dark:text-orange-400";
   return "text-muted-foreground";
@@ -298,12 +297,12 @@ function ExplorerTreeRow({
   const fileTint = fileIconClass(node.name);
 
   const rowClass = cn(
-    "group relative flex w-full min-h-[22px] items-center gap-1 rounded-sm px-1.5 py-0.5 text-left text-[12px] leading-tight text-foreground outline-none transition-colors",
+    "group relative flex w-full min-h-[22px] items-center gap-1 px-1.5 py-0.5 text-left text-[13px] leading-tight text-foreground outline-none transition-colors",
     compactFolders && "min-h-[20px] py-0",
     !isRenaming &&
       "hover:bg-muted-foreground/10 focus-visible:bg-muted-foreground/12 focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-0",
     selected && "bg-muted-foreground/20",
-    active && "bg-primary/12 font-medium",
+    active && "bg-primary/12 font-medium border-t border-b border-border/60",
     node.nested && "opacity-95",
   );
 
@@ -333,7 +332,10 @@ function ExplorerTreeRow({
             <IconChevronRight
               size={12}
               stroke={1.75}
-              className={cn("opacity-80 transition-transform", expanded && "rotate-90")}
+              className={cn(
+                "opacity-80 transition-transform",
+                expanded && "rotate-90",
+              )}
             />
           )}
         </span>
@@ -368,12 +370,14 @@ function ExplorerTreeRow({
           onChange={(e) => onRenameChange(e.target.value)}
           onKeyDown={onRenameKeyDown}
           onBlur={onRenameBlur}
-          className="relative z-[1] h-6 min-w-0 flex-1 py-0 text-[12px]"
+          className="relative z-[1] h-6 min-w-0 flex-1 py-0 text-[13px]"
           onClick={(e) => e.stopPropagation()}
         />
       ) : (
         <>
-          <span className="relative z-[1] min-w-0 flex-1 truncate">{node.name}</span>
+          <span className="relative z-[1] min-w-0 flex-1 truncate">
+            {node.name}
+          </span>
           {node.isDirectory && folderDirtyCount > 0 ? (
             <span
               className="relative z-[1] ml-1 inline-flex min-w-4 shrink-0 items-center justify-center rounded-sm border border-border/70 px-1 text-[10px] leading-4 text-primary"
@@ -387,7 +391,7 @@ function ExplorerTreeRow({
                 <span
                   key={`${node.fullPath}-${badge.id}`}
                   className={cn(
-                    "relative z-[1] ml-1 shrink-0 text-[11px] leading-none",
+                    "relative z-[1] ml-1 shrink-0 text-[14px] leading-none",
                     badgeToneClass(badge.tone),
                   )}
                   aria-label={badge.tooltip}
@@ -402,50 +406,49 @@ function ExplorerTreeRow({
     </>
   );
 
-  const body =
-    isRenaming ? (
-      <div
-        id={treeItemId}
-        role="treeitem"
-        aria-level={node.depth + 1}
-        aria-selected={selected}
-        aria-expanded={node.isDirectory ? expanded : undefined}
-        tabIndex={selected ? 0 : -1}
-        className={rowClass}
-        style={rowStyle}
-        title={node.fullPath}
-        onFocus={() => onSelect(node)}
-        onClick={() => onSelect(node)}
-      >
-        {rowChrome}
-      </div>
-    ) : (
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <button
-            type="button"
-            id={treeItemId}
-            role="treeitem"
-            aria-level={node.depth + 1}
-            aria-selected={selected}
-            aria-expanded={node.isDirectory ? expanded : undefined}
-            tabIndex={selected ? 0 : -1}
-            className={rowClass}
-            style={rowStyle}
-            title={node.fullPath}
-            onFocus={() => onSelect(node)}
-            onClick={() => {
-              onSelect(node);
-              if (node.isDirectory) onToggleDir(node.fullPath);
-              else onActivate(node);
-            }}
-          >
-            {rowChrome}
-          </button>
-        </ContextMenuTrigger>
-        <ContextMenuContent className="min-w-44">{menu}</ContextMenuContent>
-      </ContextMenu>
-    );
+  const body = isRenaming ? (
+    <div
+      id={treeItemId}
+      role="treeitem"
+      aria-level={node.depth + 1}
+      aria-selected={selected}
+      aria-expanded={node.isDirectory ? expanded : undefined}
+      tabIndex={selected ? 0 : -1}
+      className={rowClass}
+      style={rowStyle}
+      title={node.fullPath}
+      onFocus={() => onSelect(node)}
+      onClick={() => onSelect(node)}
+    >
+      {rowChrome}
+    </div>
+  ) : (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <button
+          type="button"
+          id={treeItemId}
+          role="treeitem"
+          aria-level={node.depth + 1}
+          aria-selected={selected}
+          aria-expanded={node.isDirectory ? expanded : undefined}
+          tabIndex={selected ? 0 : -1}
+          className={rowClass}
+          style={rowStyle}
+          title={node.fullPath}
+          onFocus={() => onSelect(node)}
+          onClick={() => {
+            onSelect(node);
+            if (node.isDirectory) onToggleDir(node.fullPath);
+            else onActivate(node);
+          }}
+        >
+          {rowChrome}
+        </button>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="min-w-44">{menu}</ContextMenuContent>
+    </ContextMenu>
+  );
 
   return (
     <>
@@ -465,8 +468,13 @@ function ExplorerTreeRow({
 export function ExplorerView() {
   const { activeFilePath, openFile, tabs, isDirty } = useEditorSession();
   const { dispatch } = useWorkbenchState();
-  const { rootPath, workspaceRoots, setWorkspaceRoot, removeWorkspaceRoot, openProjectDialog } =
-    useWorkspace();
+  const {
+    rootPath,
+    workspaceRoots,
+    setWorkspaceRoot,
+    removeWorkspaceRoot,
+    openProjectDialog,
+  } = useWorkspace();
   const decorationProviders = useRegistrySubscription(
     explorerDecorationRegistry.subscribe,
     () => explorerDecorationRegistry.get(),
@@ -503,7 +511,9 @@ export function ExplorerView() {
   const [markerVersion, setMarkerVersion] = useState(0);
   const [scmVersion, setScmVersion] = useState(0);
   const monacoRef = useRef<typeof import("monaco-editor") | null>(null);
-  const scmStateRef = useRef<Map<string, "modified" | "added" | "deleted" | "renamed" | "untracked">>(new Map());
+  const scmStateRef = useRef<
+    Map<string, "modified" | "added" | "deleted" | "renamed" | "untracked">
+  >(new Map());
   const refreshTokenRef = useRef(0);
   const expandedPathsRef = useRef(expandedPaths);
   const cacheRef = useRef(cache);
@@ -633,8 +643,7 @@ export function ExplorerView() {
         const isDirectory = entryIsDirectory(entry);
         const isFile =
           !isDirectory &&
-          (entryIsFile(entry) ||
-            (!entry.isDirectory && !entry.isFile));
+          (entryIsFile(entry) || (!entry.isDirectory && !entry.isFile));
         const node: ExplorerNode = {
           name: entry.name,
           fullPath,
@@ -697,7 +706,10 @@ export function ExplorerView() {
   const badgesByPath = useMemo(() => {
     void markerVersion;
     void scmVersion;
-    const markerByPath = new Map<string, { errors: number; warnings: number }>();
+    const markerByPath = new Map<
+      string,
+      { errors: number; warnings: number }
+    >();
     try {
       const markers = monacoRef.current?.editor.getModelMarkers({}) ?? [];
       for (const marker of markers) {
@@ -1099,8 +1111,9 @@ export function ExplorerView() {
         string,
         "modified" | "added" | "deleted" | "renamed" | "untracked"
       > = {};
-      const cycle: Array<"modified" | "added" | "deleted" | "renamed" | "untracked"> =
-        ["modified", "added", "deleted", "renamed", "untracked"];
+      const cycle: Array<
+        "modified" | "added" | "deleted" | "renamed" | "untracked"
+      > = ["modified", "added", "deleted", "renamed", "untracked"];
       files.forEach((f, i) => {
         statuses[f.fullPath] = cycle[i % cycle.length];
       });
@@ -1157,153 +1170,152 @@ export function ExplorerView() {
     ? (rootPath.split(/[/\\]/).pop() ?? rootPath)
     : "FOLDERS";
 
-  const explorerHeaderActions =
-    rootPath ? (
-      <>
-        <button
-          type="button"
-          className="hover:text-foreground hover:bg-muted-foreground/10 rounded-sm p-1"
-          title="New File"
-          onClick={() => void runCreateFile()}
-        >
-          <IconFilePlus size={14} />
-        </button>
-        <button
-          type="button"
-          className="hover:text-foreground hover:bg-muted-foreground/10 rounded-sm p-1"
-          title="New Folder"
-          onClick={() => void runCreateFolder()}
-        >
-          <IconFolderPlus size={14} />
-        </button>
-        <button
-          type="button"
-          className="hover:text-foreground hover:bg-muted-foreground/10 rounded-sm p-1 disabled:opacity-50"
-          title="Refresh"
-          onClick={() => rootPath && void refreshRoot(rootPath)}
-          disabled={!rootPath || loadingRoot}
-        >
-          <IconRefresh size={14} />
-        </button>
-        <button
-          type="button"
-          className="hover:text-foreground hover:bg-muted-foreground/10 rounded-sm p-1"
-          title="Collapse All"
-          onClick={runCollapseAll}
-        >
-          <IconChevronRight size={14} />
-        </button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="hover:text-foreground hover:bg-muted-foreground/10 rounded-sm p-1"
-              title="Views and more actions"
-            >
-              <IconDots size={14} />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-48">
-            <DropdownMenuItem onSelect={() => void runCreateFile()}>
-              New File
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void runCreateFolder()}>
-              New Folder
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={!rootPath || loadingRoot}
-              onSelect={() => rootPath && void refreshRoot(rootPath)}
-            >
-              Refresh Explorer
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={runCollapseAll}>
-              Collapse Folders in Explorer
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>Sort By</DropdownMenuLabel>
-            <DropdownMenuRadioGroup
-              value={sortMode}
-              onValueChange={(v) => setSortMode(v as SortMode)}
-            >
-              <DropdownMenuRadioItem value="type">Type</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuCheckboxItem
-              checked={showHidden}
-              onCheckedChange={(checked) => setShowHidden(checked === true)}
-            >
-              Show Hidden Files
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              checked={compactFolders}
-              onCheckedChange={(checked) => setCompactFolders(checked === true)}
-            >
-              Compact Folders
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              checked={autoReveal}
-              onCheckedChange={(checked) => setAutoReveal(checked === true)}
-            >
-              Auto Reveal
-            </DropdownMenuCheckboxItem>
-            {workspaceRoots.length > 1 ? (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel>Workspace Folders</DropdownMenuLabel>
-                <DropdownMenuRadioGroup
-                  value={rootPath ?? ""}
-                  onValueChange={(v) => setWorkspaceRoot(v || null)}
-                >
-                  {workspaceRoots.map((p) => (
-                    <DropdownMenuRadioItem key={p} value={p}>
-                      {p.split(/[/\\]/).pop() ?? p}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </>
-            ) : null}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => void openProjectDialog()}>
-              Add Folder to Workspace
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={!rootPath}
-              onSelect={() => {
-                if (rootPath) removeWorkspaceRoot(rootPath);
-              }}
-            >
-              Remove Folder from Workspace
-            </DropdownMenuItem>
-            {DEV_MODE ? (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel>Dev</DropdownMenuLabel>
-                <DropdownMenuItem
-                  onSelect={() => void executeCommand(MOCK_SCM_COMMAND_ID)}
-                >
-                  Mock SCM Decorations
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={() => void executeCommand(CLEAR_SCM_COMMAND_ID)}
-                >
-                  Clear SCM Decorations
-                </DropdownMenuItem>
-              </>
-            ) : null}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </>
-    ) : (
+  const explorerHeaderActions = rootPath ? (
+    <>
       <button
         type="button"
         className="hover:text-foreground hover:bg-muted-foreground/10 rounded-sm p-1"
-        title="Open Folder"
-        onClick={() => void openProjectDialog()}
+        title="New File"
+        onClick={() => void runCreateFile()}
       >
-        <IconFolderOpen size={14} />
+        <IconFilePlus size={14} />
       </button>
-    );
+      <button
+        type="button"
+        className="hover:text-foreground hover:bg-muted-foreground/10 rounded-sm p-1"
+        title="New Folder"
+        onClick={() => void runCreateFolder()}
+      >
+        <IconFolderPlus size={14} />
+      </button>
+      <button
+        type="button"
+        className="hover:text-foreground hover:bg-muted-foreground/10 rounded-sm p-1 disabled:opacity-50"
+        title="Refresh"
+        onClick={() => rootPath && void refreshRoot(rootPath)}
+        disabled={!rootPath || loadingRoot}
+      >
+        <IconRefresh size={14} />
+      </button>
+      <button
+        type="button"
+        className="hover:text-foreground hover:bg-muted-foreground/10 rounded-sm p-1"
+        title="Collapse All"
+        onClick={runCollapseAll}
+      >
+        <IconChevronRight size={14} />
+      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="hover:text-foreground hover:bg-muted-foreground/10 rounded-sm p-1"
+            title="Views and more actions"
+          >
+            <IconDots size={14} />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-48">
+          <DropdownMenuItem onSelect={() => void runCreateFile()}>
+            New File
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void runCreateFolder()}>
+            New Folder
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!rootPath || loadingRoot}
+            onSelect={() => rootPath && void refreshRoot(rootPath)}
+          >
+            Refresh Explorer
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={runCollapseAll}>
+            Collapse Folders in Explorer
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>Sort By</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={sortMode}
+            onValueChange={(v) => setSortMode(v as SortMode)}
+          >
+            <DropdownMenuRadioItem value="type">Type</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuCheckboxItem
+            checked={showHidden}
+            onCheckedChange={(checked) => setShowHidden(checked === true)}
+          >
+            Show Hidden Files
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem
+            checked={compactFolders}
+            onCheckedChange={(checked) => setCompactFolders(checked === true)}
+          >
+            Compact Folders
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem
+            checked={autoReveal}
+            onCheckedChange={(checked) => setAutoReveal(checked === true)}
+          >
+            Auto Reveal
+          </DropdownMenuCheckboxItem>
+          {workspaceRoots.length > 1 ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Workspace Folders</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={rootPath ?? ""}
+                onValueChange={(v) => setWorkspaceRoot(v || null)}
+              >
+                {workspaceRoots.map((p) => (
+                  <DropdownMenuRadioItem key={p} value={p}>
+                    {p.split(/[/\\]/).pop() ?? p}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </>
+          ) : null}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => void openProjectDialog()}>
+            Add Folder to Workspace
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!rootPath}
+            onSelect={() => {
+              if (rootPath) removeWorkspaceRoot(rootPath);
+            }}
+          >
+            Remove Folder from Workspace
+          </DropdownMenuItem>
+          {DEV_MODE ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Dev</DropdownMenuLabel>
+              <DropdownMenuItem
+                onSelect={() => void executeCommand(MOCK_SCM_COMMAND_ID)}
+              >
+                Mock SCM Decorations
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => void executeCommand(CLEAR_SCM_COMMAND_ID)}
+              >
+                Clear SCM Decorations
+              </DropdownMenuItem>
+            </>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  ) : (
+    <button
+      type="button"
+      className="hover:text-foreground hover:bg-muted-foreground/10 rounded-sm p-1"
+      title="Open Folder"
+      onClick={() => void openProjectDialog()}
+    >
+      <IconFolderOpen size={14} />
+    </button>
+  );
 
   return (
     <div
@@ -1326,160 +1338,162 @@ export function ExplorerView() {
         ) : null}
 
         <div className="min-h-0 flex-1 overflow-auto py-0.5">
-        {loadingRoot ? (
-          <div className="text-muted-foreground px-3 py-2 text-xs">
-            Loading workspace...
-          </div>
-        ) : !rootPath ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
-            <div className="text-muted-foreground text-xs">
-              No folder opened
+          {loadingRoot ? (
+            <div className="text-muted-foreground px-3 py-2 text-xs">
+              Loading workspace...
             </div>
-            <button
-              type="button"
-              onClick={() => void openProjectDialog()}
-              className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted"
+          ) : !rootPath ? (
+            <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
+              <div className="text-muted-foreground text-xs">
+                No folder opened
+              </div>
+              <button
+                type="button"
+                onClick={() => void openProjectDialog()}
+                className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted"
+              >
+                Open Project
+              </button>
+            </div>
+          ) : buildVisibleTree.length === 0 ? (
+            <div className="text-muted-foreground px-3 py-2 text-xs">
+              {entries.length > 0
+                ? "All items are hidden. Enable Hidden to show dotfiles."
+                : "This folder is empty."}
+            </div>
+          ) : (
+            <div
+              className="px-0.5"
+              role="tree"
+              aria-label="Explorer files"
+              aria-activedescendant={selectedTreeItemId}
+              onFocus={onTreeContainerFocus}
             >
-              Open Project
-            </button>
-          </div>
-        ) : buildVisibleTree.length === 0 ? (
-          <div className="text-muted-foreground px-3 py-2 text-xs">
-            {entries.length > 0
-              ? "All items are hidden. Enable Hidden to show dotfiles."
-              : "This folder is empty."}
-          </div>
-        ) : (
-          <div
-            className="px-0.5"
-            role="tree"
-            aria-label="Explorer files"
-            aria-activedescendant={selectedTreeItemId}
-            onFocus={onTreeContainerFocus}
-          >
-            {buildVisibleTree.map((node) => (
-              <ExplorerTreeRow
-                key={node.fullPath}
-                treeItemId={explorerTreeItemId(node.fullPath)}
-                node={node}
-                expanded={expandedPaths.has(node.fullPath)}
-                loading={loadingPaths.has(node.fullPath)}
-                selected={selectedPath === node.fullPath}
-                active={activeFilePath === node.fullPath}
-                badges={badgesByPath.get(node.fullPath) ?? []}
-                folderDirtyCount={folderDirtyCountByPath.get(node.fullPath) ?? 0}
-                compactFolders={compactFolders}
-                errorMessage={nodeErrors.get(node.fullPath)}
-                isRenaming={renamingPath === node.fullPath}
-                renameDraft={renameDraft}
-                renameInputRef={renameInputRef}
-                onRenameChange={setRenameDraft}
-                onRenameKeyDown={onRenameKeyDown}
-                onRenameBlur={onRenameBlur}
-                onToggleDir={(p) => void toggleDir(p)}
-                onSelect={(n) => {
-                  setSelectedPath(n.fullPath);
-                }}
-                onActivate={(n) => {
-                  if (n.isFile) void openFile(n.fullPath);
-                }}
-                menu={
-                  <>
-                    <ContextMenuItem
-                      onSelect={() => {
-                        void runCreateFile(node);
-                      }}
-                    >
-                      New File
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onSelect={() => {
-                        void runCreateFolder(node);
-                      }}
-                    >
-                      New Folder
-                    </ContextMenuItem>
-                    <ContextMenuSeparator />
-                    <ContextMenuItem
-                      onSelect={() => {
-                        startInlineRename(node);
-                      }}
-                    >
-                      Rename
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      variant="destructive"
-                      onSelect={() => {
-                        void runDeleteNode(node);
-                      }}
-                    >
-                      Delete
-                    </ContextMenuItem>
-                    <ContextMenuSeparator />
-                    <ContextMenuItem
-                      onSelect={() => {
-                        void runOpenToSide(node);
-                      }}
-                    >
-                      Open to Side
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onSelect={() => {
-                        void runFindInFolder(node);
-                      }}
-                    >
-                      Find in Folder
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      disabled={!node.isFile}
-                      onSelect={() => {
-                        void runCompareSelected(node);
-                      }}
-                    >
-                      {!node.isFile
-                        ? "Compare Selected"
-                        : compareSelectedPath === node.fullPath
-                          ? "Selected for Compare"
-                          : compareSelectedPath
-                            ? "Compare with Selected"
-                            : "Select for Compare"}
-                    </ContextMenuItem>
-                    <ContextMenuSeparator />
-                    <ContextMenuItem
-                      onSelect={() => {
-                        void copyPathToClipboard(node.fullPath);
-                      }}
-                    >
-                      Copy Path
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onSelect={() => {
-                        void copyRelativePathToClipboard(node.fullPath);
-                      }}
-                    >
-                      Copy Relative Path
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onSelect={() => {
-                        void revealInSystemExplorer(node.fullPath);
-                      }}
-                    >
-                      Reveal in File Manager
-                    </ContextMenuItem>
-                    <ContextMenuSeparator />
-                    <ContextMenuItem
-                      onSelect={() => {
-                        if (rootPath) void refreshRoot(rootPath);
-                      }}
-                    >
-                      Refresh
-                    </ContextMenuItem>
-                  </>
-                }
-              />
-            ))}
-          </div>
-        )}
+              {buildVisibleTree.map((node) => (
+                <ExplorerTreeRow
+                  key={node.fullPath}
+                  treeItemId={explorerTreeItemId(node.fullPath)}
+                  node={node}
+                  expanded={expandedPaths.has(node.fullPath)}
+                  loading={loadingPaths.has(node.fullPath)}
+                  selected={selectedPath === node.fullPath}
+                  active={activeFilePath === node.fullPath}
+                  badges={badgesByPath.get(node.fullPath) ?? []}
+                  folderDirtyCount={
+                    folderDirtyCountByPath.get(node.fullPath) ?? 0
+                  }
+                  compactFolders={compactFolders}
+                  errorMessage={nodeErrors.get(node.fullPath)}
+                  isRenaming={renamingPath === node.fullPath}
+                  renameDraft={renameDraft}
+                  renameInputRef={renameInputRef}
+                  onRenameChange={setRenameDraft}
+                  onRenameKeyDown={onRenameKeyDown}
+                  onRenameBlur={onRenameBlur}
+                  onToggleDir={(p) => void toggleDir(p)}
+                  onSelect={(n) => {
+                    setSelectedPath(n.fullPath);
+                  }}
+                  onActivate={(n) => {
+                    if (n.isFile) void openFile(n.fullPath);
+                  }}
+                  menu={
+                    <>
+                      <ContextMenuItem
+                        onSelect={() => {
+                          void runCreateFile(node);
+                        }}
+                      >
+                        New File
+                      </ContextMenuItem>
+                      <ContextMenuItem
+                        onSelect={() => {
+                          void runCreateFolder(node);
+                        }}
+                      >
+                        New Folder
+                      </ContextMenuItem>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem
+                        onSelect={() => {
+                          startInlineRename(node);
+                        }}
+                      >
+                        Rename
+                      </ContextMenuItem>
+                      <ContextMenuItem
+                        variant="destructive"
+                        onSelect={() => {
+                          void runDeleteNode(node);
+                        }}
+                      >
+                        Delete
+                      </ContextMenuItem>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem
+                        onSelect={() => {
+                          void runOpenToSide(node);
+                        }}
+                      >
+                        Open to Side
+                      </ContextMenuItem>
+                      <ContextMenuItem
+                        onSelect={() => {
+                          void runFindInFolder(node);
+                        }}
+                      >
+                        Find in Folder
+                      </ContextMenuItem>
+                      <ContextMenuItem
+                        disabled={!node.isFile}
+                        onSelect={() => {
+                          void runCompareSelected(node);
+                        }}
+                      >
+                        {!node.isFile
+                          ? "Compare Selected"
+                          : compareSelectedPath === node.fullPath
+                            ? "Selected for Compare"
+                            : compareSelectedPath
+                              ? "Compare with Selected"
+                              : "Select for Compare"}
+                      </ContextMenuItem>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem
+                        onSelect={() => {
+                          void copyPathToClipboard(node.fullPath);
+                        }}
+                      >
+                        Copy Path
+                      </ContextMenuItem>
+                      <ContextMenuItem
+                        onSelect={() => {
+                          void copyRelativePathToClipboard(node.fullPath);
+                        }}
+                      >
+                        Copy Relative Path
+                      </ContextMenuItem>
+                      <ContextMenuItem
+                        onSelect={() => {
+                          void revealInSystemExplorer(node.fullPath);
+                        }}
+                      >
+                        Reveal in File Manager
+                      </ContextMenuItem>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem
+                        onSelect={() => {
+                          if (rootPath) void refreshRoot(rootPath);
+                        }}
+                      >
+                        Refresh
+                      </ContextMenuItem>
+                    </>
+                  }
+                />
+              ))}
+            </div>
+          )}
         </div>
       </WorkbenchSidebarSection>
     </div>

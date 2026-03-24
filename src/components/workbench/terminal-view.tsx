@@ -11,6 +11,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import { executeCommand } from "@/extensions/commands/command-service";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -57,6 +58,31 @@ const searchById = new Map<number, SearchAddon>();
 const pendingData = new Map<number, string[]>();
 let activeSessionIdGlobal: number | null = null;
 let lastSearchTerm = "";
+
+function getShellDisplayName(shell: string): string {
+  const trimmed = shell.trim();
+  if (!trimmed) return "shell";
+  const parts = trimmed.split("/");
+  const last = parts[parts.length - 1]?.trim();
+  return last || trimmed;
+}
+
+function resolveSessionName(
+  seedName: string | undefined,
+  shell: string,
+  sessionId: number,
+): string {
+  const displayShell = getShellDisplayName(shell);
+  const trimmed = seedName?.trim() ?? "";
+  if (!trimmed) return displayShell;
+  const legacyNamePattern = new RegExp(
+    `^(?:${shell.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}|${displayShell.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})\\s+\\d+$`,
+    "i",
+  );
+  if (legacyNamePattern.test(trimmed)) return displayShell;
+  if (trimmed === String(sessionId)) return displayShell;
+  return trimmed;
+}
 
 export function getActiveTerminalSessionId(): number | null {
   return activeSessionIdGlobal;
@@ -154,7 +180,7 @@ async function createTerminalSessionInternal(seed?: PersistedSessionSeed) {
     });
     const session: TerminalSession = {
       id: created.sessionId,
-      name: seed?.name || `${created.shell} ${created.sessionId}`,
+      name: resolveSessionName(seed?.name, created.shell, created.sessionId),
       shell: created.shell,
       cwd,
       createdAt: new Date().toLocaleTimeString(),
@@ -183,6 +209,9 @@ export function killTerminalSession(sessionId: number) {
   searchById.delete(session.id);
   pendingData.delete(session.id);
   terminalSessions = terminalSessions.filter((s) => s.id !== session.id);
+  if (terminalSessions.length === 0) {
+    void executeCommand("boson.panel.close");
+  }
   persistSessionSeeds();
   emitTerminalChange();
 }
@@ -261,9 +290,18 @@ function selectAllActiveTerminal() {
 }
 
 function markSessionExited(sessionId: number) {
-  terminalSessions = terminalSessions.map((s) =>
-    s.id === sessionId ? { ...s, status: "exited" } : s,
-  );
+  const existing = terminalSessions.find((s) => s.id === sessionId);
+  if (!existing) return;
+  terminalsById.get(sessionId)?.dispose();
+  terminalsById.delete(sessionId);
+  fitById.delete(sessionId);
+  searchById.delete(sessionId);
+  pendingData.delete(sessionId);
+  terminalSessions = terminalSessions.filter((s) => s.id !== sessionId);
+  if (terminalSessions.length === 0) {
+    void executeCommand("boson.panel.close");
+  }
+  persistSessionSeeds();
   emitTerminalChange();
 }
 
@@ -271,6 +309,7 @@ export function TerminalView() {
   const sessions = useSyncExternalStore(subscribeTerminal, getTerminalSnapshot);
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const initializedRef = useRef(false);
 
   const activeSession = useMemo(
     () => sessions.find((s) => s.id === activeSessionId) ?? null,
@@ -356,7 +395,8 @@ export function TerminalView() {
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
-    if (sessions.length > 0) return;
+    if (initializedRef.current) return;
+    initializedRef.current = true;
     const seeds = readSessionSeeds();
     if (seeds.length === 0) {
       createTerminalSession();
@@ -367,7 +407,7 @@ export function TerminalView() {
         await createTerminalSessionInternal(seed);
       }
     })();
-  }, [sessions.length]);
+  }, []);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
