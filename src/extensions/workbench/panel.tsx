@@ -3,7 +3,20 @@ import { IconPlus, IconTrash, IconX } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { registerCommand, unregisterCommand } from "@/extensions/commands/command-service";
 import { clearOutputLines } from "@/components/workbench/panel-output-view";
-import { clearTerminalSessions, createTerminalSession } from "@/components/workbench/terminal-view";
+import {
+  clearActiveTerminalBuffer,
+  copyActiveTerminalSelection,
+  createTerminalSession,
+  findNextInActiveTerminal,
+  findPreviousInActiveTerminal,
+  focusActiveTerminal,
+  getActiveTerminalSessionId,
+  killOtherTerminalSessions,
+  killTerminalSession,
+  pasteIntoActiveTerminal,
+  renameTerminalSession,
+  searchInActiveTerminal,
+} from "@/components/workbench/terminal-view";
 import { cn } from "@/lib/utils";
 import { workbenchViewRegistry } from "./registry";
 import { useRegistrySubscription } from "./use-registry-subscription";
@@ -96,17 +109,63 @@ export function WorkbenchPanel() {
     });
     registerCommand("boson.panel.clearActive", () => {
       if (activePanelId === "workbench.views.terminal") {
-        clearTerminalSessions();
+        clearActiveTerminalBuffer();
         return;
       }
       if (activePanelId === "workbench.views.output") {
         clearOutputLines();
       }
     });
+    registerCommand("boson.terminal.killActive", () => {
+      const activeTerminalSessionId = getActiveTerminalSessionId();
+      if (!activeTerminalSessionId) return;
+      killTerminalSession(activeTerminalSessionId);
+    });
+    registerCommand("boson.terminal.killOthers", () => {
+      const activeTerminalSessionId = getActiveTerminalSessionId();
+      if (!activeTerminalSessionId) return;
+      killOtherTerminalSessions(activeTerminalSessionId);
+    });
+    registerCommand("boson.terminal.renameActive", () => {
+      const activeTerminalSessionId = getActiveTerminalSessionId();
+      if (!activeTerminalSessionId) return;
+      const renamed = window.prompt("Rename terminal");
+      if (!renamed) return;
+      renameTerminalSession(activeTerminalSessionId, renamed);
+    });
+    registerCommand("boson.terminal.find", () => {
+      const term = window.prompt("Find in terminal");
+      if (!term) return;
+      searchInActiveTerminal(term);
+    });
+    registerCommand("boson.terminal.findNext", () => {
+      findNextInActiveTerminal();
+    });
+    registerCommand("boson.terminal.findPrevious", () => {
+      findPreviousInActiveTerminal();
+    });
+    registerCommand("boson.terminal.copy", () => {
+      void copyActiveTerminalSelection();
+    });
+    registerCommand("boson.terminal.paste", () => {
+      void pasteIntoActiveTerminal();
+    });
+    registerCommand("boson.terminal.focus", () => {
+      focusActiveTerminal();
+    });
     return () => {
       unregisterCommand("boson.panel.close");
       unregisterCommand("boson.panel.newTerminal");
       unregisterCommand("boson.panel.clearActive");
+      unregisterCommand("boson.terminal.killActive");
+      unregisterCommand("boson.terminal.killOthers");
+      unregisterCommand("boson.terminal.renameActive");
+      unregisterCommand("boson.terminal.find");
+      unregisterCommand("boson.terminal.findNext");
+      unregisterCommand("boson.terminal.findPrevious");
+      unregisterCommand("boson.terminal.copy");
+      unregisterCommand("boson.terminal.paste");
+      unregisterCommand("boson.terminal.focus");
     };
   }, [activePanelId, dispatch]);
 
@@ -241,7 +300,7 @@ export function WorkbenchPanel() {
                 aria-label="Clear"
                 onClick={() => {
                   if (activePanelId === "workbench.views.terminal") {
-                    clearTerminalSessions();
+                    clearActiveTerminalBuffer();
                     return;
                   }
                   if (activePanelId === "workbench.views.output") {

@@ -78,6 +78,14 @@ function ExtensionsBody() {
   );
 }
 
+// function OutlineBody() {
+//   return (
+//     <div className="text-muted-foreground p-3 text-sm">
+//       Outline placeholder — symbols from the active editor can be surfaced here.
+//     </div>
+//   );
+// }
+
 export function registerBuiltinWorkbenchContributions(): void {
   if (registered) {
     return;
@@ -179,6 +187,15 @@ export function registerBuiltinWorkbenchContributions(): void {
     title: "CHAT",
     render: () => <AiChatView />,
   });
+  // Temporarily disabled until outline is wired to real editor symbols.
+  // workbenchViewRegistry.register({
+  //   id: "workbench.views.outline",
+  //   location: "auxiliary",
+  //   containerId: "workbench.auxiliary",
+  //   order: 20,
+  //   title: "OUTLINE",
+  //   render: () => <OutlineBody />,
+  // });
 
   workbenchViewRegistry.register({
     id: "workbench.views.terminal",

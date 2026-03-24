@@ -26,3 +26,13 @@
 - [x] Add `.github/ISSUE_TEMPLATE/bug_report.md`
 - [x] Add `.github/ISSUE_TEMPLATE/feature_request.md`
 - [x] Add `.github/PULL_REQUEST_TEMPLATE.md`
+
+## Right sidebar parity (secondary sidebar)
+
+- [x] Add resizable right sidebar with width persistence
+- [x] Add active auxiliary view persistence
+- [x] Add auxiliary tab strip for multi-view switching
+- [x] Add keyboard navigation for auxiliary tabs
+- [x] Add auxiliary header actions (prev/next, more menu, close)
+- [x] Add auxiliary commands (focus/next/prev/hide/reset width/open/close)
+- [x] Add second built-in auxiliary view (outline placeholder)

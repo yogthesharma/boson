@@ -14,6 +14,12 @@ export type EditorTab = {
   id: string;
   path: string;
   name: string;
+  groupId: string;
+};
+
+export type EditorGroup = {
+  id: string;
+  label: string;
 };
 
 type EditorApi = {
@@ -23,6 +29,8 @@ type EditorApi = {
 
 type EditorSessionValue = {
   tabs: EditorTab[];
+  groups: EditorGroup[];
+  activeGroupId: string;
   activeTabId: string | null;
   activeFilePath: string | null;
   cursorLine: number | null;
@@ -37,7 +45,7 @@ type EditorSessionValue = {
   editorError: string | null;
   clearError: () => void;
   isDirty: (tabId: string) => boolean;
-  openFile: (path: string) => Promise<void>;
+  openFile: (path: string, options?: { sideBySide?: boolean; groupId?: string }) => Promise<void>;
   saveActive: () => Promise<void>;
   saveTab: (id: string) => Promise<void>;
   saveAllDirty: () => Promise<void>;
@@ -46,6 +54,10 @@ type EditorSessionValue = {
   closeOtherTabs: (id: string) => void;
   closeTabsToRight: (id: string) => void;
   moveTab: (tabId: string, targetId: string, position: "before" | "after") => void;
+  moveTabToGroup: (tabId: string, groupId: string) => void;
+  closeGroup: (groupId: string) => void;
+  saveGroupDirty: (groupId: string) => Promise<void>;
+  setActiveGroup: (groupId: string) => void;
   selectTab: (id: string) => void;
   closeTab: (id: string) => void;
   bindEditor: (api: EditorApi) => void;
@@ -74,6 +86,10 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
   const monacoTheme = dark ? "vs-dark" : "vs";
 
   const [tabs, setTabs] = useState<EditorTab[]>([]);
+  const [groups, setGroups] = useState<EditorGroup[]>([
+    { id: "group-1", label: "Group 1" },
+  ]);
+  const [activeGroupId, setActiveGroupId] = useState("group-1");
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [dirtyVersion, setDirtyVersion] = useState(0);
   const [editorError, setEditorError] = useState<string | null>(null);
@@ -91,10 +107,30 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
 
   const activeTabIdRef = useRef(activeTabId);
   activeTabIdRef.current = activeTabId;
+  const activeGroupIdRef = useRef(activeGroupId);
+  activeGroupIdRef.current = activeGroupId;
+  const ensureGroup = useCallback((groupId: string) => {
+    setGroups((prev) => {
+      if (prev.some((g) => g.id === groupId)) return prev;
+      return [...prev, { id: groupId, label: `Group ${prev.length + 1}` }];
+    });
+  }, []);
+
+  const createNextGroup = useCallback(() => {
+    const existing = new Set(groups.map((g) => g.id));
+    let i = 1;
+    while (existing.has(`group-${i}`)) i += 1;
+    const id = `group-${i}`;
+    ensureGroup(id);
+    return id;
+  }, [groups, ensureGroup]);
+
   const monacoThemeRef = useRef(monacoTheme);
   monacoThemeRef.current = monacoTheme;
   const saveActiveRef = useRef<() => Promise<void>>(async () => {});
-  const openFileRef = useRef<(path: string) => Promise<void>>(async () => {});
+  const openFileRef = useRef<
+    (path: string, options?: { sideBySide?: boolean; groupId?: string }) => Promise<void>
+  >(async () => {});
 
   const syncEditorStatus = useCallback(() => {
     const editor = apiRef.current?.editor;
@@ -254,17 +290,30 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
   }, [monacoTheme]);
 
   const openFile = useCallback(
-    async (filePath: string) => {
+    async (filePath: string, options?: { sideBySide?: boolean; groupId?: string }) => {
       if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
         setEditorError("Open files in the Tauri desktop app.");
         return;
       }
 
+      const targetGroupId =
+        options?.groupId ??
+        (options?.sideBySide ? createNextGroup() : activeGroupIdRef.current);
+      ensureGroup(targetGroupId);
       setEditorError(null);
       const api = apiRef.current;
       const monaco = api?.monaco ?? (await import("monaco-editor"));
       const editor = api?.editor ?? null;
       if (modelsRef.current.has(filePath)) {
+        const existingTab = tabs.find((t) => t.id === filePath);
+        if (existingTab && existingTab.groupId !== targetGroupId) {
+          setTabs((prev) =>
+            prev.map((t) =>
+              t.id === filePath ? { ...t, groupId: targetGroupId } : t,
+            ),
+          );
+        }
+        setActiveGroupId(targetGroupId);
         setActiveTabId(filePath);
         switchToPath(filePath);
         if (!editor) {
@@ -287,7 +336,12 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
         savedVersionRef.current.set(filePath, model.getAlternativeVersionId());
 
         const name = filePath.split(/[/\\]/).pop() ?? filePath;
-        setTabs((t) => (t.some((x) => x.id === filePath) ? t : [...t, { id: filePath, path: filePath, name }]));
+        setTabs((t) =>
+          t.some((x) => x.id === filePath)
+            ? t
+            : [...t, { id: filePath, path: filePath, name, groupId: targetGroupId }],
+        );
+        setActiveGroupId(targetGroupId);
         setActiveTabId(filePath);
         if (editor) {
           editor.setModel(model);
@@ -298,7 +352,7 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
         setEditorError(e instanceof Error ? e.message : String(e));
       }
     },
-    [switchToPath],
+    [switchToPath, ensureGroup, createNextGroup, tabs],
   );
   openFileRef.current = openFile;
 
@@ -307,9 +361,11 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
   }, [activeTabId, tabs, syncEditorStatus]);
 
   const selectTab = useCallback((id: string) => {
+    const t = tabs.find((x) => x.id === id);
+    if (t) setActiveGroupId(t.groupId);
     setActiveTabId(id);
     switchToPath(id);
-  }, [switchToPath]);
+  }, [switchToPath, tabs]);
 
   const closeTab = useCallback(
     (id: string) => {
@@ -332,6 +388,8 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
             if (na) switchToPath(na);
             else apiRef.current?.editor.setModel(null);
           });
+          const nextTab = na ? next.find((t) => t.id === na) : null;
+          if (nextTab) setActiveGroupId(nextTab.groupId);
           return na;
         });
         return next;
@@ -366,6 +424,9 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
       }
       const next = prev.filter((t) => !ids.has(t.id));
       setActiveTabId((cur) => (cur && !ids.has(cur) ? cur : (next[next.length - 1]?.id ?? null)));
+      const nextActiveId = next[next.length - 1]?.id ?? null;
+      const nextActive = nextActiveId ? next.find((t) => t.id === nextActiveId) : null;
+      if (nextActive) setActiveGroupId(nextActive.groupId);
       queueMicrotask(() => {
         const nextActive = next[next.length - 1]?.id;
         if (nextActive) switchToPath(nextActive);
@@ -438,6 +499,72 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const moveTabToGroup = useCallback(
+    (tabId: string, groupId: string) => {
+      ensureGroup(groupId);
+      setTabs((prev) => {
+        const idx = prev.findIndex((t) => t.id === tabId);
+        if (idx < 0) return prev;
+        const next = [...prev];
+        const [moved] = next.splice(idx, 1);
+        const updated = { ...moved, groupId };
+        const targetEnd = next.reduce(
+          (last, t, i) => (t.groupId === groupId ? i + 1 : last),
+          0,
+        );
+        next.splice(targetEnd, 0, updated);
+        return next;
+      });
+    },
+    [ensureGroup],
+  );
+
+  const closeGroup = useCallback(
+    (groupId: string) => {
+      const ids = tabs.filter((t) => t.groupId === groupId).map((t) => t.id);
+      closeTabs(ids);
+      setGroups((prev) => {
+        const next = prev.filter((g) => g.id !== groupId);
+        return next.length > 0 ? next : [{ id: "group-1", label: "Group 1" }];
+      });
+      if (activeGroupIdRef.current === groupId) {
+        const fallback = groups.find((g) => g.id !== groupId)?.id ?? "group-1";
+        setActiveGroupId(fallback);
+      }
+    },
+    [tabs, closeTabs, groups],
+  );
+
+  const saveGroupDirty = useCallback(
+    async (groupId: string) => {
+      const groupTabs = tabs.filter((t) => t.groupId === groupId);
+      for (const tab of groupTabs) {
+        const model = modelsRef.current.get(tab.id);
+        const saved = savedVersionRef.current.get(tab.id);
+        const dirty =
+          !!model && saved !== undefined && model.getAlternativeVersionId() !== saved;
+        if (dirty) {
+          await saveTab(tab.id);
+        }
+      }
+    },
+    [tabs, saveTab],
+  );
+
+  const setActiveGroup = useCallback(
+    (groupId: string) => {
+      ensureGroup(groupId);
+      setActiveGroupId(groupId);
+      const inGroup = tabs.filter((t) => t.groupId === groupId);
+      const nextTab = inGroup.find((t) => t.id === activeTabIdRef.current) ?? inGroup[inGroup.length - 1];
+      if (nextTab) {
+        setActiveTabId(nextTab.id);
+        switchToPath(nextTab.id);
+      }
+    },
+    [tabs, ensureGroup, switchToPath],
+  );
+
   const isDirty = useCallback(
     (tabId: string) => {
       const m = modelsRef.current.get(tabId);
@@ -452,6 +579,8 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
   const value = useMemo<EditorSessionValue>(
     () => ({
       tabs,
+      groups,
+      activeGroupId,
       activeTabId,
       activeFilePath: activeTabId,
       cursorLine,
@@ -475,6 +604,10 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
       closeOtherTabs,
       closeTabsToRight,
       moveTab,
+      moveTabToGroup,
+      closeGroup,
+      saveGroupDirty,
+      setActiveGroup,
       selectTab,
       closeTab,
       bindEditor,
@@ -482,6 +615,8 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
     }),
     [
       tabs,
+      groups,
+      activeGroupId,
       activeTabId,
       cursorLine,
       cursorColumn,
@@ -503,6 +638,10 @@ export function EditorSessionProvider({ children }: { children: ReactNode }) {
       closeOtherTabs,
       closeTabsToRight,
       moveTab,
+      moveTabToGroup,
+      closeGroup,
+      saveGroupDirty,
+      setActiveGroup,
       selectTab,
       closeTab,
       bindEditor,

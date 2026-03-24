@@ -25,7 +25,6 @@ export function EditorArea() {
     editorError,
     clearError,
     isDirty,
-    saveActive,
     selectTab,
     closeTab,
     bindEditor,
@@ -67,11 +66,9 @@ export function EditorArea() {
         state.auxiliaryBarVisible && "border-r border-border",
       )}
     >
-      <div className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto border-b border-border px-1 text-sm">
-        {tabs.length === 0 ? (
-          <span className="text-muted-foreground px-2 text-xs">Open a file from the explorer</span>
-        ) : (
-          tabs.map((t) => {
+      {tabs.length > 0 ? (
+        <div className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto border-b border-border px-1 text-sm">
+          {tabs.map((t) => {
             const active = t.id === activeTabId;
             const dirty = isDirty(t.id);
             return (
@@ -104,21 +101,9 @@ export function EditorArea() {
                 </button>
               </div>
             );
-          })
-        )}
-        <div className="ml-auto flex shrink-0 items-center gap-1 pr-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            className="h-6 text-xs"
-            disabled={!activeTabId}
-            onClick={() => void saveActive()}
-          >
-            Save
-          </Button>
+          })}
         </div>
-      </div>
+      ) : null}
 
       {editorError ? (
         <div className="text-destructive flex shrink-0 items-center justify-between gap-2 border-b border-destructive/30 bg-destructive/10 px-2 py-1 text-xs">

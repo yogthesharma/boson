@@ -32,8 +32,10 @@ function StatusBarItem({
   const baseClass = cn(
     "inline-flex h-5 max-w-full items-center rounded-sm px-1.5",
     "transition-colors duration-100",
-    interactive ? "cursor-pointer hover:bg-[var(--statusbar-hover)]" : "hover:bg-[var(--statusbar-hover)]",
-    "focus-visible:bg-[var(--statusbar-active)] focus-visible:outline-none",
+    interactive
+      ? "cursor-pointer hover:bg-muted-foreground/20"
+      : "hover:bg-muted-foreground/20",
+    "focus-visible:bg-muted-foreground/25 focus-visible:outline-none",
     alignRight ? "justify-end" : "justify-start",
   );
 
@@ -173,7 +175,7 @@ export function WorkbenchStatusBar() {
       role="status"
       aria-live="polite"
       aria-label="Status bar"
-      className="flex h-[22px] shrink-0 items-center border-t border-[var(--statusbar-border)] bg-[var(--statusbar-background)] px-1.5 text-[11px] text-[var(--statusbar-foreground)]"
+      className="flex h-[22px] shrink-0 items-center border-t border-border bg-muted px-1.5 text-[11px] text-foreground"
     >
       <div className="flex min-w-0 flex-1 items-center gap-0.5">
         {left.map((item) => (
@@ -214,7 +216,7 @@ export function WorkbenchStatusBar() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="inline-flex h-5 w-5 items-center justify-center rounded-sm text-[var(--statusbar-foreground)] hover:bg-[var(--statusbar-hover)] focus-visible:bg-[var(--statusbar-active)] focus-visible:outline-none"
+                className="inline-flex h-5 w-5 items-center justify-center rounded-sm text-foreground hover:bg-muted-foreground/20 focus-visible:bg-muted-foreground/25 focus-visible:outline-none"
                 title="More status items"
                 aria-label="More status items"
               >

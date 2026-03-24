@@ -35,13 +35,19 @@ export function OpenEditorsView({
   sortMode: OpenEditorsSortMode;
 }) {
   const {
+    groups,
+    activeGroupId,
     activeTabId,
+    setActiveGroup,
     selectTab,
     closeTab,
     closeAllTabs,
+    closeGroup,
     closeOtherTabs,
     closeTabs,
     moveTab,
+    moveTabToGroup,
+    saveGroupDirty,
     saveTab,
     isDirty,
   } = useEditorSession();
@@ -51,10 +57,75 @@ export function OpenEditorsView({
     position: "before" | "after";
   } | null>(null);
   const dndEnabled = sortMode === "editorOrder";
+  const tabsByGroup = useMemo(() => {
+    const map = new Map<string, EditorTab[]>();
+    for (const g of groups) map.set(g.id, []);
+    for (const tab of tabs) {
+      const bucket = map.get(tab.groupId);
+      if (bucket) bucket.push(tab);
+      else map.set(tab.groupId, [tab]);
+    }
+    return map;
+  }, [groups, tabs]);
 
   return (
     <div className="flex flex-col py-0.5 pb-1" role="list" aria-label="Open editors">
-      {tabs.map((tab) => {
+      {groups.map((group) => {
+        const groupTabs = tabsByGroup.get(group.id) ?? [];
+        if (groupTabs.length === 0) return null;
+        const groupDirtyCount = groupTabs.filter((t) => isDirty(t.id)).length;
+        return (
+          <div key={group.id} className="mb-1">
+            <div
+              className={cn(
+                "text-muted-foreground flex h-5 items-center gap-1 px-2 text-[10px] font-semibold tracking-wide uppercase",
+                activeGroupId === group.id && "text-foreground",
+              )}
+              onClick={() => setActiveGroup(group.id)}
+              onDragOver={(e) => {
+                if (!dndEnabled || !draggingTabId) return;
+                e.preventDefault();
+              }}
+              onDrop={(e) => {
+                if (!dndEnabled || !draggingTabId) return;
+                e.preventDefault();
+                moveTabToGroup(draggingTabId, group.id);
+                setDropTarget(null);
+                setDraggingTabId(null);
+              }}
+            >
+              <span className="truncate">{group.label}</span>
+              {groupDirtyCount > 0 ? (
+                <span className="rounded-sm border border-border/80 bg-muted px-1 leading-3">
+                  {groupDirtyCount}
+                </span>
+              ) : null}
+              <div className="ml-auto flex items-center gap-0.5">
+                <button
+                  type="button"
+                  className="hover:text-foreground hover:bg-muted-foreground/15 rounded-sm p-0.5"
+                  title="Save group"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void saveGroupDirty(group.id);
+                  }}
+                >
+                  <IconCircleFilled size={7} />
+                </button>
+                <button
+                  type="button"
+                  className="hover:text-foreground hover:bg-muted-foreground/15 rounded-sm p-0.5"
+                  title="Close group"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeGroup(group.id);
+                  }}
+                >
+                  <IconX size={10} />
+                </button>
+              </div>
+            </div>
+            {groupTabs.map((tab) => {
         const active = tab.id === activeTabId;
         const dirty = isDirty(tab.id);
         return (
@@ -99,6 +170,7 @@ export function OpenEditorsView({
                   const position: "before" | "after" =
                     e.clientY < rect.top + rect.height / 2 ? "before" : "after";
                   moveTab(source, tab.id, position);
+                  moveTabToGroup(source, tab.groupId);
                   setDropTarget(null);
                   setDraggingTabId(null);
                 }}
@@ -173,6 +245,9 @@ export function OpenEditorsView({
               </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
+        );
+      })}
+          </div>
         );
       })}
     </div>
