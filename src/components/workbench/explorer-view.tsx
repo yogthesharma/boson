@@ -48,6 +48,11 @@ import { Input } from "@/components/ui/input";
 import { WorkbenchSidebarSection } from "@/components/workbench/workbench-sidebar-section";
 import { useEditorSession } from "@/editor/editor-session-context";
 import {
+  executeCommand,
+  registerCommand,
+  unregisterCommand,
+} from "@/extensions/commands/command-service";
+import {
   explorerDecorationRegistry,
   type ExplorerDecorationBadge,
 } from "@/extensions/workbench/explorer-decorations";
@@ -61,6 +66,9 @@ const SORT_KEY = "boson.explorer.sortMode";
 const COMPACT_KEY = "boson.explorer.compactFolders";
 const AUTO_REVEAL_KEY = "boson.explorer.autoReveal";
 const SCM_STATUS_EVENT = "boson:scm-status-changed";
+const MOCK_SCM_COMMAND_ID = "boson.explorer.dev.mockScmDecorations";
+const CLEAR_SCM_COMMAND_ID = "boson.explorer.dev.clearScmDecorations";
+const DEV_MODE = import.meta.env.DEV;
 
 type SortMode = "type" | "name";
 
@@ -1083,6 +1091,38 @@ export function ExplorerView() {
   );
 
   useEffect(() => {
+    registerCommand(MOCK_SCM_COMMAND_ID, () => {
+      const files = buildVisibleTree.filter((n) => n.isFile).slice(0, 8);
+      if (files.length === 0) return;
+      const statuses: Record<
+        string,
+        "modified" | "added" | "deleted" | "renamed" | "untracked"
+      > = {};
+      const cycle: Array<"modified" | "added" | "deleted" | "renamed" | "untracked"> =
+        ["modified", "added", "deleted", "renamed", "untracked"];
+      files.forEach((f, i) => {
+        statuses[f.fullPath] = cycle[i % cycle.length];
+      });
+      window.dispatchEvent(
+        new CustomEvent(SCM_STATUS_EVENT, {
+          detail: { statuses },
+        }),
+      );
+    });
+    registerCommand(CLEAR_SCM_COMMAND_ID, () => {
+      window.dispatchEvent(
+        new CustomEvent(SCM_STATUS_EVENT, {
+          detail: { statuses: {} },
+        }),
+      );
+    });
+    return () => {
+      unregisterCommand(MOCK_SCM_COMMAND_ID);
+      unregisterCommand(CLEAR_SCM_COMMAND_ID);
+    };
+  }, [buildVisibleTree]);
+
+  useEffect(() => {
     if (!rootPath || !activeFilePath) return;
     if (!autoReveal) return;
     const root = explorerPathKey(rootPath);
@@ -1206,6 +1246,22 @@ export function ExplorerView() {
             >
               Auto Reveal
             </DropdownMenuCheckboxItem>
+            {DEV_MODE ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Dev</DropdownMenuLabel>
+                <DropdownMenuItem
+                  onSelect={() => void executeCommand(MOCK_SCM_COMMAND_ID)}
+                >
+                  Mock SCM Decorations
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => void executeCommand(CLEAR_SCM_COMMAND_ID)}
+                >
+                  Clear SCM Decorations
+                </DropdownMenuItem>
+              </>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </>

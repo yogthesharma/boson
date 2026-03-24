@@ -1,9 +1,18 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { IconDots } from "@tabler/icons-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { executeCommand } from "@/extensions/commands/command-service";
+import { useEditorSession } from "@/editor/editor-session-context";
 import { workbenchStatusBarRegistry } from "./registry";
 import { useRegistrySubscription } from "./use-registry-subscription";
-import type { StatusBarItemContribution } from "./types";
+import { useWorkbenchState } from "./workbench-state";
+import type { StatusBarItemContribution, StatusBarVisibilityContext } from "./types";
 
 function StatusBarItem({
   children,
@@ -74,11 +83,30 @@ function fitByPriority(items: StatusBarItemContribution[], maxCount: number): St
   return items.filter((i) => selectedIds.has(i.id));
 }
 
+function runStatusCommand(item: StatusBarItemContribution) {
+  if (!item.commandId) return;
+  void executeCommand(item.commandId);
+}
+
 export function WorkbenchStatusBar() {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(0);
+  const { activeFilePath } = useEditorSession();
+  const {
+    state: { panelVisible, primarySidebarVisible, auxiliaryBarVisible },
+  } = useWorkbenchState();
   const items = useRegistrySubscription(workbenchStatusBarRegistry.subscribe, () =>
     workbenchStatusBarRegistry.get(),
+  );
+
+  const visibilityContext = useMemo<StatusBarVisibilityContext>(
+    () => ({
+      hasActiveEditor: Boolean(activeFilePath),
+      panelVisible,
+      primarySidebarVisible,
+      auxiliaryBarVisible,
+    }),
+    [activeFilePath, panelVisible, primarySidebarVisible, auxiliaryBarVisible],
   );
 
   useEffect(() => {
@@ -97,10 +125,11 @@ export function WorkbenchStatusBar() {
         .filter(
           (i) =>
             i.alignment === "left" &&
+            (i.when ? i.when(visibilityContext) : true) &&
             (!i.minVisibleWidth || width >= i.minVisibleWidth),
         )
         .sort(sortStatusItems),
-    [items, width],
+    [items, width, visibilityContext],
   );
   const right = useMemo(
     () => {
@@ -108,6 +137,7 @@ export function WorkbenchStatusBar() {
         .filter(
           (i) =>
             i.alignment === "right" &&
+            (i.when ? i.when(visibilityContext) : true) &&
             (!i.minVisibleWidth || width >= i.minVisibleWidth),
         )
         .sort(sortStatusItems);
@@ -121,8 +151,21 @@ export function WorkbenchStatusBar() {
 
       return fitByPriority(visible, maxCount);
     },
-    [items, width],
+    [items, width, visibilityContext],
   );
+
+  const overflowItems = useMemo(() => {
+    const allVisibleRight = [...items]
+      .filter(
+        (i) =>
+          i.alignment === "right" &&
+          (i.when ? i.when(visibilityContext) : true) &&
+          (!i.minVisibleWidth || width >= i.minVisibleWidth),
+      )
+      .sort(sortStatusItems);
+    const visibleIds = new Set(right.map((i) => i.id));
+    return allVisibleRight.filter((i) => !visibleIds.has(i.id));
+  }, [items, right, visibilityContext, width]);
 
   return (
     <div
@@ -141,9 +184,7 @@ export function WorkbenchStatusBar() {
             ariaLabel={resolveAriaLabel(item)}
             onActivate={
               item.commandId
-                ? () => {
-                    void executeCommand(item.commandId!);
-                  }
+                ? () => runStatusCommand(item)
                 : undefined
             }
           >
@@ -161,15 +202,38 @@ export function WorkbenchStatusBar() {
             ariaLabel={resolveAriaLabel(item)}
             onActivate={
               item.commandId
-                ? () => {
-                    void executeCommand(item.commandId!);
-                  }
+                ? () => runStatusCommand(item)
                 : undefined
             }
           >
             {resolveItemContent(item)}
           </StatusBarItem>
         ))}
+        {overflowItems.length > 0 ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex h-5 w-5 items-center justify-center rounded-sm text-[var(--statusbar-foreground)] hover:bg-[var(--statusbar-hover)] focus-visible:bg-[var(--statusbar-active)] focus-visible:outline-none"
+                title="More status items"
+                aria-label="More status items"
+              >
+                <IconDots size={12} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              {overflowItems.map((item) => (
+                <DropdownMenuItem
+                  key={item.id}
+                  disabled={!item.commandId}
+                  onSelect={() => runStatusCommand(item)}
+                >
+                  {item.label ?? item.tooltip ?? item.id}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
       </div>
     </div>
   );

@@ -47,8 +47,17 @@ export type StatusBarItemContribution = {
   priority?: number;
   /** Hide the item when status bar width is below this threshold. */
   minVisibleWidth?: number;
+  /** Optional context predicate for conditional visibility. */
+  when?: (context: StatusBarVisibilityContext) => boolean;
   /** Optional custom renderer for advanced item UIs. */
   render?: () => ReactNode;
+};
+
+export type StatusBarVisibilityContext = {
+  hasActiveEditor: boolean;
+  panelVisible: boolean;
+  primarySidebarVisible: boolean;
+  auxiliaryBarVisible: boolean;
 };
 
 export type WorkbenchState = {

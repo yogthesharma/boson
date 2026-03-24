@@ -1,8 +1,62 @@
-# Tauri + React + Typescript
+# Boson
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+Boson is an open-source, local-first coding workbench focused on direct AI operator access from your own machine.
 
-## Recommended IDE Setup
+The goal is simple: developers should be able to use powerful coding operators without being locked into a single paid editor vendor.
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
-# boson
+## Why Boson
+
+- Local-first architecture built on Tauri.
+- Bring-your-own model provider and API key.
+- Extensible workbench and contribution model.
+- Open roadmap and open governance docs.
+
+## Current Features
+
+- VS Code-inspired workbench layout (titlebar, sidebar, editor, panel, status bar).
+- Monaco-based code editor with tab management and save flows.
+- Explorer and Open Editors views with rich interactions.
+- Status bar telemetry (line/column, encoding, EOL, language).
+- Tauri desktop runtime with file system and dialog integrations.
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js 20+
+- pnpm
+- Rust toolchain
+- Tauri system prerequisites for your OS
+
+### Run in development
+
+```bash
+pnpm install
+pnpm tauri dev
+```
+
+### Build
+
+```bash
+pnpm tauri build
+```
+
+## Documentation
+
+- Vision: `docs/vision.md`
+- Architecture: `docs/architecture.md`
+- Operator integration: `docs/operator-integration.md`
+- Providers: `docs/providers.md`
+- Privacy and data: `docs/privacy-and-data.md`
+- Threat model: `docs/threat-model.md`
+- Plugin SDK: `docs/plugin-sdk.md`
+- Project roadmap: `docs/roadmap.md`
+- FAQ: `docs/faq.md`
+- Release process: `docs/release.md`
+
+## Community
+
+- Contributing guide: `CONTRIBUTING.md`
+- Code of conduct: `CODE_OF_CONDUCT.md`
+- Security policy: `SECURITY.md`
+- License: `LICENSE`

@@ -217,6 +217,7 @@ export function registerBuiltinWorkbenchContributions(): void {
     commandId: "boson.status.gotoLine",
     priority: 100,
     minVisibleWidth: 520,
+    when: (ctx) => ctx.hasActiveEditor,
   });
   workbenchStatusBarRegistry.register({
     id: "boson.status.encoding",
@@ -227,6 +228,7 @@ export function registerBuiltinWorkbenchContributions(): void {
     commandId: "boson.status.changeEncoding",
     priority: 60,
     minVisibleWidth: 820,
+    when: (ctx) => ctx.hasActiveEditor,
   });
   workbenchStatusBarRegistry.register({
     id: "boson.status.eol",
@@ -237,6 +239,7 @@ export function registerBuiltinWorkbenchContributions(): void {
     commandId: "boson.status.toggleEol",
     priority: 70,
     minVisibleWidth: 740,
+    when: (ctx) => ctx.hasActiveEditor,
   });
   workbenchStatusBarRegistry.register({
     id: "boson.status.lang",
@@ -247,5 +250,6 @@ export function registerBuiltinWorkbenchContributions(): void {
     commandId: "boson.status.changeLanguage",
     priority: 80,
     minVisibleWidth: 920,
+    when: (ctx) => ctx.hasActiveEditor,
   });
 }
