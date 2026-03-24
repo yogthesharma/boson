@@ -6,7 +6,14 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
-import { IconChevronLeft, IconChevronRight, IconHistory, IconPlus, IconDots, IconX } from "@tabler/icons-react";
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconHistory,
+  IconPlus,
+  IconDots,
+  IconX,
+} from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,7 +21,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { registerCommand, unregisterCommand } from "@/extensions/commands/command-service";
+import {
+  registerCommand,
+  unregisterCommand,
+} from "@/extensions/commands/command-service";
 import { cn } from "@/lib/utils";
 import { workbenchViewRegistry } from "./registry";
 import { useRegistrySubscription } from "./use-registry-subscription";
@@ -38,13 +48,16 @@ function clampWidth(width: number): number {
 
 export function AuxiliaryBar() {
   const { dispatch } = useWorkbenchState();
-  const allViews = useRegistrySubscription(workbenchViewRegistry.subscribe, () =>
-    workbenchViewRegistry.get(),
+  const allViews = useRegistrySubscription(
+    workbenchViewRegistry.subscribe,
+    () => workbenchViewRegistry.get(),
   );
 
   const auxiliaryViews = useMemo(
     () =>
-      [...allViews].filter((v) => v.location === "auxiliary").sort((a, b) => a.order - b.order),
+      [...allViews]
+        .filter((v) => v.location === "auxiliary")
+        .sort((a, b) => a.order - b.order),
     [allViews],
   );
 
@@ -63,7 +76,9 @@ export function AuxiliaryBar() {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ x: number; width: number } | null>(null);
-  const [chatHeaderThreads, setChatHeaderThreads] = useState<HeaderThread[]>([]);
+  const [chatHeaderThreads, setChatHeaderThreads] = useState<HeaderThread[]>(
+    [],
+  );
   const [chatHeaderActiveId, setChatHeaderActiveId] = useState<string>("");
   const [chatHeaderOpenIds, setChatHeaderOpenIds] = useState<string[]>([]);
 
@@ -92,7 +107,10 @@ export function AuxiliaryBar() {
     if (auxiliaryViews.length === 0) return;
     const idx = auxiliaryViews.findIndex((v) => v.id === activeViewId);
     const move = (delta: -1 | 1) => {
-      const next = idx < 0 ? 0 : (idx + delta + auxiliaryViews.length) % auxiliaryViews.length;
+      const next =
+        idx < 0
+          ? 0
+          : (idx + delta + auxiliaryViews.length) % auxiliaryViews.length;
       setActiveViewId(auxiliaryViews[next].id);
     };
     registerCommand("boson.auxiliary.nextView", () => {
@@ -119,32 +137,39 @@ export function AuxiliaryBar() {
     };
   }, [activeViewId, auxiliaryViews, dispatch]);
 
-  if (auxiliaryViews.length === 0) {
-    return null;
-  }
-
   const activeIndex = auxiliaryViews.findIndex((v) => v.id === activeViewId);
-  const activeView = auxiliaryViews[activeIndex] ?? auxiliaryViews[0];
+  const activeView = auxiliaryViews[activeIndex] ?? auxiliaryViews[0] ?? null;
   const showViewTabs = auxiliaryViews.length > 1;
-  const showChatThreadTabs = !showViewTabs && activeView.id === "workbench.views.aiChat";
+  const showChatThreadTabs =
+    !showViewTabs && activeView?.id === "workbench.views.aiChat";
 
   useEffect(() => {
     if (!showChatThreadTabs) return;
     const syncFromStorage = () => {
       try {
         const raw = localStorage.getItem("boson.ai.threads") ?? "[]";
-        const parsed = JSON.parse(raw) as Array<{ id?: string; title?: string }>;
+        const parsed = JSON.parse(raw) as Array<{
+          id?: string;
+          title?: string;
+        }>;
         const next = Array.isArray(parsed)
           ? parsed
               .filter((t) => typeof t?.id === "string")
-              .map((t) => ({ id: t.id as string, title: (t.title as string) || "New Chat" }))
+              .map((t) => ({
+                id: t.id as string,
+                title: (t.title as string) || "New Chat",
+              }))
           : [];
         setChatHeaderThreads(next.slice(0, 4));
-        setChatHeaderActiveId(localStorage.getItem("boson.ai.activeThread") ?? "");
+        setChatHeaderActiveId(
+          localStorage.getItem("boson.ai.activeThread") ?? "",
+        );
         const openRaw = localStorage.getItem("boson.ai.openThreads") ?? "[]";
         const openParsed = JSON.parse(openRaw);
         setChatHeaderOpenIds(
-          Array.isArray(openParsed) ? openParsed.filter((x) => typeof x === "string").slice(0, 4) : [],
+          Array.isArray(openParsed)
+            ? openParsed.filter((x) => typeof x === "string").slice(0, 4)
+            : [],
         );
       } catch {
         setChatHeaderThreads([]);
@@ -153,11 +178,13 @@ export function AuxiliaryBar() {
     };
     syncFromStorage();
     const onChanged = (event: Event) => {
-      const detail = (event as CustomEvent<{
-        threads?: HeaderThread[];
-        activeThreadId?: string;
-        openThreadIds?: string[];
-      }>).detail;
+      const detail = (
+        event as CustomEvent<{
+          threads?: HeaderThread[];
+          activeThreadId?: string;
+          openThreadIds?: string[];
+        }>
+      ).detail;
       if (detail?.threads && Array.isArray(detail.threads)) {
         setChatHeaderThreads(detail.threads.slice(0, 4));
       } else {
@@ -167,12 +194,17 @@ export function AuxiliaryBar() {
         setChatHeaderActiveId(detail.activeThreadId);
       }
       if (Array.isArray(detail?.openThreadIds)) {
-        setChatHeaderOpenIds(detail.openThreadIds.filter((x) => typeof x === "string").slice(0, 4));
+        setChatHeaderOpenIds(
+          detail.openThreadIds.filter((x) => typeof x === "string").slice(0, 4),
+        );
       }
     };
     window.addEventListener(THREADS_CHANGED_EVENT, onChanged as EventListener);
     return () => {
-      window.removeEventListener(THREADS_CHANGED_EVENT, onChanged as EventListener);
+      window.removeEventListener(
+        THREADS_CHANGED_EVENT,
+        onChanged as EventListener,
+      );
     };
   }, [showChatThreadTabs]);
 
@@ -207,14 +239,16 @@ export function AuxiliaryBar() {
     if (auxiliaryViews.length < 2) return;
     if (e.key === "ArrowRight") {
       e.preventDefault();
-      const next = (activeIndex + 1 + auxiliaryViews.length) % auxiliaryViews.length;
+      const next =
+        (activeIndex + 1 + auxiliaryViews.length) % auxiliaryViews.length;
       setActiveViewId(auxiliaryViews[next].id);
       tabRefs.current[next]?.focus();
       return;
     }
     if (e.key === "ArrowLeft") {
       e.preventDefault();
-      const next = (activeIndex - 1 + auxiliaryViews.length) % auxiliaryViews.length;
+      const next =
+        (activeIndex - 1 + auxiliaryViews.length) % auxiliaryViews.length;
       setActiveViewId(auxiliaryViews[next].id);
       tabRefs.current[next]?.focus();
       return;
@@ -233,9 +267,13 @@ export function AuxiliaryBar() {
     }
   };
 
+  if (auxiliaryViews.length === 0) {
+    return null;
+  }
+
   return (
     <aside
-      className="hidden min-h-0 shrink-0 self-stretch border-l border-border bg-muted lg:flex"
+      className="hidden min-h-0 shrink-0 self-stretch border-l border-border bg-background lg:flex"
       style={{ width: `${width}px` }}
       aria-label="Secondary sidebar"
       data-tauri-no-drag
@@ -244,14 +282,16 @@ export function AuxiliaryBar() {
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize secondary sidebar"
-        className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-muted-foreground/20"
+        className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-muted/10"
         onMouseDown={onResizeStart}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div
-          className="group/auxhead flex h-8 shrink-0 items-center border-b border-border bg-muted px-1"
+          className="group/auxhead flex h-8 shrink-0 items-center border-b border-border bg-background px-1"
           role={showViewTabs ? "tablist" : undefined}
-          aria-label={showViewTabs ? "Secondary sidebar views" : "AI chat sidebar"}
+          aria-label={
+            showViewTabs ? "Secondary sidebar views" : "AI chat sidebar"
+          }
           onKeyDown={showViewTabs ? onTabKeyDown : undefined}
         >
           <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
@@ -302,7 +342,9 @@ export function AuxiliaryBar() {
                         className="min-w-0 flex-1 truncate text-left text-[11px] font-medium"
                         onClick={() =>
                           window.dispatchEvent(
-                            new CustomEvent(SELECT_THREAD_EVENT, { detail: { id: thread.id } }),
+                            new CustomEvent(SELECT_THREAD_EVENT, {
+                              detail: { id: thread.id },
+                            }),
                           )
                         }
                         title={thread.title}
@@ -317,7 +359,9 @@ export function AuxiliaryBar() {
                         onClick={(e) => {
                           e.stopPropagation();
                           window.dispatchEvent(
-                            new CustomEvent(CLOSE_THREAD_EVENT, { detail: { id: thread.id } }),
+                            new CustomEvent(CLOSE_THREAD_EVENT, {
+                              detail: { id: thread.id },
+                            }),
                           );
                         }}
                       >
@@ -329,7 +373,7 @@ export function AuxiliaryBar() {
               </div>
             ) : (
               <div className="px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {activeView.title || "AI Chat"}
+                {activeView?.title || "AI Chat"}
               </div>
             )}
           </div>
@@ -359,7 +403,9 @@ export function AuxiliaryBar() {
                   title="Previous view"
                   aria-label="Previous view"
                   onClick={() => {
-                    const next = (activeIndex - 1 + auxiliaryViews.length) % auxiliaryViews.length;
+                    const next =
+                      (activeIndex - 1 + auxiliaryViews.length) %
+                      auxiliaryViews.length;
                     setActiveViewId(auxiliaryViews[next].id);
                   }}
                 >
@@ -401,12 +447,14 @@ export function AuxiliaryBar() {
                 <DropdownMenuItem onSelect={() => contentRef.current?.focus()}>
                   Focus view
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => dispatch({ type: "toggleAuxiliaryBar" })}>
+                <DropdownMenuItem
+                  onSelect={() => dispatch({ type: "toggleAuxiliaryBar" })}
+                >
                   Hide sidebar
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            {activeView.id === "workbench.views.aiChat" ? (
+            {activeView?.id === "workbench.views.aiChat" ? (
               <Button
                 type="button"
                 variant="ghost"
@@ -415,7 +463,9 @@ export function AuxiliaryBar() {
                 title="Toggle chat history"
                 aria-label="Toggle chat history"
                 onClick={() => {
-                  window.dispatchEvent(new CustomEvent("boson.aiChat.toggleHistory"));
+                  window.dispatchEvent(
+                    new CustomEvent("boson.aiChat.toggleHistory"),
+                  );
                 }}
               >
                 <IconHistory size={12} />
@@ -435,14 +485,16 @@ export function AuxiliaryBar() {
           </div>
         </div>
         <div
-          id={`aux-view-${activeView.id}`}
+          id={`aux-view-${activeView?.id ?? "none"}`}
           role="tabpanel"
-          aria-labelledby={`aux-tab-${activeView.id}`}
+          aria-labelledby={activeView ? `aux-tab-${activeView.id}` : undefined}
           tabIndex={-1}
           ref={contentRef}
           className="flex min-h-0 flex-1 flex-col overflow-hidden outline-none"
         >
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{activeView.render()}</div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {activeView ? activeView.render() : null}
+          </div>
         </div>
       </div>
     </aside>

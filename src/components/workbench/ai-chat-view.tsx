@@ -48,7 +48,10 @@ const defaultMessages: ChatMessage[] = [
 const defaultAgents = ["Default", "Code", "Architect"];
 
 function nowLabel(): string {
-  return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return new Date().toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function createDefaultThread(): ChatThread {
@@ -85,7 +88,8 @@ export function AiChatView() {
     if (typeof window === "undefined") return [createDefaultThread()];
     try {
       const parsed = JSON.parse(localStorage.getItem(THREADS_KEY) ?? "[]");
-      if (!Array.isArray(parsed) || parsed.length === 0) return [createDefaultThread()];
+      if (!Array.isArray(parsed) || parsed.length === 0)
+        return [createDefaultThread()];
       return parsed as ChatThread[];
     } catch {
       return [createDefaultThread()];
@@ -99,7 +103,9 @@ export function AiChatView() {
     if (typeof window === "undefined") return [];
     try {
       const parsed = JSON.parse(localStorage.getItem(OPEN_THREADS_KEY) ?? "[]");
-      return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
+      return Array.isArray(parsed)
+        ? parsed.filter((x) => typeof x === "string")
+        : [];
     } catch {
       return [];
     }
@@ -156,9 +162,15 @@ export function AiChatView() {
 
   useEffect(() => {
     const onToggle = () => setShowHistory((v) => !v);
-    window.addEventListener("boson.aiChat.toggleHistory", onToggle as EventListener);
+    window.addEventListener(
+      "boson.aiChat.toggleHistory",
+      onToggle as EventListener,
+    );
     return () => {
-      window.removeEventListener("boson.aiChat.toggleHistory", onToggle as EventListener);
+      window.removeEventListener(
+        "boson.aiChat.toggleHistory",
+        onToggle as EventListener,
+      );
     };
   }, []);
 
@@ -192,7 +204,10 @@ export function AiChatView() {
     window.addEventListener(NEW_THREAD_EVENT, onNew as EventListener);
     window.addEventListener(CLOSE_THREAD_EVENT, onClose as EventListener);
     return () => {
-      window.removeEventListener(SELECT_THREAD_EVENT, onSelect as EventListener);
+      window.removeEventListener(
+        SELECT_THREAD_EVENT,
+        onSelect as EventListener,
+      );
       window.removeEventListener(NEW_THREAD_EVENT, onNew as EventListener);
       window.removeEventListener(CLOSE_THREAD_EVENT, onClose as EventListener);
     };
@@ -210,7 +225,9 @@ export function AiChatView() {
 
   useEffect(() => {
     if (!activeThreadId) return;
-    setOpenThreadIds((prev) => (prev.includes(activeThreadId) ? prev : [...prev, activeThreadId]));
+    setOpenThreadIds((prev) =>
+      prev.includes(activeThreadId) ? prev : [...prev, activeThreadId],
+    );
   }, [activeThreadId]);
 
   const activeThread = useMemo(
@@ -243,7 +260,10 @@ export function AiChatView() {
         thread.id === activeThread.id
           ? {
               ...thread,
-              title: thread.messages.length === 0 ? (text.slice(0, 32) || "Image Prompt") : thread.title,
+              title:
+                thread.messages.length === 0
+                  ? text.slice(0, 32) || "Image Prompt"
+                  : thread.title,
               messages: [...thread.messages, userMessage, assistantMessage],
             }
           : thread,
@@ -269,7 +289,9 @@ export function AiChatView() {
     const next = newAgentName.trim();
     if (!next) return;
     if (agents.some((a) => a.toLowerCase() === next.toLowerCase())) {
-      setSelectedAgent(agents.find((a) => a.toLowerCase() === next.toLowerCase()) ?? "Default");
+      setSelectedAgent(
+        agents.find((a) => a.toLowerCase() === next.toLowerCase()) ?? "Default",
+      );
       setNewAgentName("");
       return;
     }
@@ -287,13 +309,17 @@ export function AiChatView() {
   const handleVoiceToggle = () => {
     const speechCtor =
       typeof window !== "undefined"
-        ? (
-            (window as Window & {
+        ? ((
+            window as Window & {
               webkitSpeechRecognition?: new () => {
                 continuous: boolean;
                 interimResults: boolean;
                 lang: string;
-                onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+                onresult:
+                  | ((event: {
+                      results: ArrayLike<ArrayLike<{ transcript: string }>>;
+                    }) => void)
+                  | null;
                 onend: (() => void) | null;
                 start: () => void;
                 stop: () => void;
@@ -302,22 +328,34 @@ export function AiChatView() {
                 continuous: boolean;
                 interimResults: boolean;
                 lang: string;
-                onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+                onresult:
+                  | ((event: {
+                      results: ArrayLike<ArrayLike<{ transcript: string }>>;
+                    }) => void)
+                  | null;
                 onend: (() => void) | null;
                 start: () => void;
                 stop: () => void;
               };
-            }).SpeechRecognition ??
-            (window as Window & { webkitSpeechRecognition?: new () => {
-              continuous: boolean;
-              interimResults: boolean;
-              lang: string;
-              onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-              onend: (() => void) | null;
-              start: () => void;
-              stop: () => void;
-            } }).webkitSpeechRecognition
-          )
+            }
+          ).SpeechRecognition ??
+          (
+            window as Window & {
+              webkitSpeechRecognition?: new () => {
+                continuous: boolean;
+                interimResults: boolean;
+                lang: string;
+                onresult:
+                  | ((event: {
+                      results: ArrayLike<ArrayLike<{ transcript: string }>>;
+                    }) => void)
+                  | null;
+                onend: (() => void) | null;
+                start: () => void;
+                stop: () => void;
+              };
+            }
+          ).webkitSpeechRecognition)
         : undefined;
 
     if (!speechCtor) {
@@ -359,8 +397,8 @@ export function AiChatView() {
   };
 
   return (
-    <div className="flex h-full min-h-0 bg-muted text-foreground">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-muted">
+    <div className="flex h-full min-h-0 bg-background text-foreground">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
         <div className="min-h-0 flex-1 space-y-3 overflow-auto p-3">
           {activeMessages.length === 0 ? (
             <div className="rounded border border-dashed border-border bg-muted/40 p-3 text-xs text-muted-foreground">
@@ -371,16 +409,13 @@ export function AiChatView() {
             <div key={m.id} className="flex gap-2">
               <div
                 className={cn(
-                  "max-w-[min(100%,24rem)] rounded-md border px-2.5 py-2 text-sm leading-relaxed",
+                  "rounded-md text-xs leading-relaxed",
                   m.role === "assistant"
-                    ? "bg-background text-foreground"
-                    : "bg-primary/95 text-primary-foreground border-primary/40",
+                    ? "bg-background text-foreground px-1"
+                    : "border border-border/80 w-full bg-muted/20 px-2 py-1",
                 )}
               >
-                <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wide opacity-70">
-                  <span>{m.role === "assistant" ? (m.agent ?? "Assistant") : "You"}</span>
-                  <span>{m.time}</span>
-                </div>
+                <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wide opacity-70"></div>
                 <p>{m.text}</p>
                 {m.imageNames && m.imageNames.length > 0 ? (
                   <div className="mt-2 flex flex-wrap gap-1">
@@ -399,11 +434,14 @@ export function AiChatView() {
           ))}
         </div>
 
-        <div className="shrink-0 border-t border-border bg-muted p-2">
+        <div className="shrink-0 bg-background p-2">
           {imageNames.length > 0 ? (
             <div className="mb-2 flex flex-wrap gap-1">
               {imageNames.map((name) => (
-                <span key={name} className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px]">
+                <span
+                  key={name}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px]"
+                >
                   {name}
                 </span>
               ))}
@@ -414,7 +452,7 @@ export function AiChatView() {
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder="Message Boson..."
-              className="max-h-44 min-h-20 w-full resize-y bg-transparent text-sm outline-none"
+              className="!max-h-24 !min-h-12 w-full resize-y bg-transparent !text-xs outline-none"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -440,10 +478,16 @@ export function AiChatView() {
                 size="icon-xs"
                 className="h-7 w-7"
                 title={recording ? "Stop voice input" : "Start voice input"}
-                aria-label={recording ? "Stop voice input" : "Start voice input"}
+                aria-label={
+                  recording ? "Stop voice input" : "Start voice input"
+                }
                 onClick={handleVoiceToggle}
               >
-                {recording ? <IconMicrophoneOff size={14} /> : <IconMicrophone size={14} />}
+                {recording ? (
+                  <IconMicrophoneOff size={14} />
+                ) : (
+                  <IconMicrophone size={14} />
+                )}
               </Button>
               <div className="ml-auto flex items-center gap-2">
                 <span className="text-[10px] text-muted-foreground">
@@ -478,13 +522,17 @@ export function AiChatView() {
       </div>
       <aside
         className={cn(
-          "flex shrink-0 flex-col border-l border-border bg-muted transition-[width,opacity] duration-150",
-          showHistory ? "w-44 opacity-100" : "w-0 overflow-hidden border-l-0 opacity-0",
+          "flex shrink-0 flex-col border-l border-border bg-background transition-[width,opacity] duration-150",
+          showHistory
+            ? "w-44 opacity-100"
+            : "w-0 overflow-hidden border-l-0 opacity-0",
         )}
         aria-hidden={!showHistory}
       >
         <div className="flex items-center justify-between border-b border-border px-2 py-1.5">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">History</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            History
+          </span>
           <Button
             type="button"
             variant="ghost"

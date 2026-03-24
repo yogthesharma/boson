@@ -465,7 +465,8 @@ function ExplorerTreeRow({
 export function ExplorerView() {
   const { activeFilePath, openFile, tabs, isDirty } = useEditorSession();
   const { dispatch } = useWorkbenchState();
-  const { rootPath, openProjectDialog } = useWorkspace();
+  const { rootPath, workspaceRoots, setWorkspaceRoot, removeWorkspaceRoot, openProjectDialog } =
+    useWorkspace();
   const decorationProviders = useRegistrySubscription(
     explorerDecorationRegistry.subscribe,
     () => explorerDecorationRegistry.get(),
@@ -936,7 +937,7 @@ export function ExplorerView() {
   const runOpenToSide = useCallback(
     async (node: ExplorerNode) => {
       if (node.isFile) {
-        await openFile(node.fullPath);
+        await openFile(node.fullPath, { sideBySide: true });
       } else {
         await toggleDir(node.fullPath);
       }
@@ -952,7 +953,7 @@ export function ExplorerView() {
         return;
       }
       await openFile(compareSelectedPath);
-      await openFile(node.fullPath);
+      await openFile(node.fullPath, { sideBySide: true });
       setCompareSelectedPath(null);
     },
     [compareSelectedPath, openFile],
@@ -1246,6 +1247,34 @@ export function ExplorerView() {
             >
               Auto Reveal
             </DropdownMenuCheckboxItem>
+            {workspaceRoots.length > 1 ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Workspace Folders</DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={rootPath ?? ""}
+                  onValueChange={(v) => setWorkspaceRoot(v || null)}
+                >
+                  {workspaceRoots.map((p) => (
+                    <DropdownMenuRadioItem key={p} value={p}>
+                      {p.split(/[/\\]/).pop() ?? p}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </>
+            ) : null}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => void openProjectDialog()}>
+              Add Folder to Workspace
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!rootPath}
+              onSelect={() => {
+                if (rootPath) removeWorkspaceRoot(rootPath);
+              }}
+            >
+              Remove Folder from Workspace
+            </DropdownMenuItem>
             {DEV_MODE ? (
               <>
                 <DropdownMenuSeparator />

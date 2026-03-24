@@ -17,12 +17,23 @@ let outputChannels: OutputChannels = {
 };
 let activeOutputChannel = "Build";
 const outputListeners = new Set<() => void>();
+let initialized = false;
+let outputSnapshot: { channels: OutputChannels; active: string } = {
+  channels: outputChannels,
+  active: activeOutputChannel,
+};
+
+function refreshSnapshot() {
+  outputSnapshot = { channels: outputChannels, active: activeOutputChannel };
+}
 
 function emitOutputChange() {
+  refreshSnapshot();
   outputListeners.forEach((l) => l());
 }
 
 function subscribeOutput(listener: () => void) {
+  ensureInitialized();
   outputListeners.add(listener);
   return () => outputListeners.delete(listener);
 }
@@ -53,7 +64,15 @@ function persistChannels() {
 }
 
 function getOutputSnapshot() {
-  return { channels: outputChannels, active: activeOutputChannel };
+  ensureInitialized();
+  return outputSnapshot;
+}
+
+function ensureInitialized() {
+  if (initialized) return;
+  initialized = true;
+  readPersistedChannels();
+  refreshSnapshot();
 }
 
 export function setActiveOutputChannel(channel: string) {
@@ -85,8 +104,11 @@ export function appendOutputLine(line: string, channel = activeOutputChannel) {
 }
 
 export function PanelOutputView() {
-  readPersistedChannels();
-  const snapshot = useSyncExternalStore(subscribeOutput, getOutputSnapshot);
+  const snapshot = useSyncExternalStore(
+    subscribeOutput,
+    getOutputSnapshot,
+    getOutputSnapshot,
+  );
   const channels = Object.keys(snapshot.channels);
   const active = snapshot.active;
   const lines = snapshot.channels[active] ?? [];

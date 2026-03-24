@@ -17,6 +17,45 @@ import { WorkbenchSidebarSection } from "@/components/workbench/workbench-sideba
 
 const OPEN_EDITORS_SORT_KEY = "boson.openEditors.sortMode";
 
+function extractDroppedPaths(data: DataTransfer): string[] {
+  const out = new Set<string>();
+  const uriList = data.getData("text/uri-list");
+  if (uriList) {
+    for (const line of uriList.split("\n")) {
+      const value = line.trim();
+      if (!value || value.startsWith("#")) continue;
+      if (value.startsWith("file://")) {
+        try {
+          const u = new URL(value);
+          out.add(decodeURIComponent(u.pathname));
+        } catch {
+          out.add(value.replace(/^file:\/\//i, ""));
+        }
+      }
+    }
+  }
+  const text = data.getData("text/plain");
+  if (text) {
+    for (const token of text.split(/\r?\n/)) {
+      const t = token.trim();
+      if (!t) continue;
+      if (t.startsWith("/") || t.startsWith("file://")) {
+        if (t.startsWith("file://")) {
+          try {
+            const u = new URL(t);
+            out.add(decodeURIComponent(u.pathname));
+          } catch {
+            out.add(t.replace(/^file:\/\//i, ""));
+          }
+        } else {
+          out.add(t);
+        }
+      }
+    }
+  }
+  return [...out];
+}
+
 function readOpenEditorsSortMode(): OpenEditorsSortMode {
   if (typeof window === "undefined") return "editorOrder";
   const raw = localStorage.getItem(OPEN_EDITORS_SORT_KEY);
@@ -50,6 +89,7 @@ export function OpenEditorsView({
     saveGroupDirty,
     saveTab,
     isDirty,
+    openFile,
   } = useEditorSession();
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{
@@ -69,7 +109,26 @@ export function OpenEditorsView({
   }, [groups, tabs]);
 
   return (
-    <div className="flex flex-col py-0.5 pb-1" role="list" aria-label="Open editors">
+    <div
+      className="flex flex-col py-0.5 pb-1"
+      role="list"
+      aria-label="Open editors"
+      onDragOver={(e) => {
+        if (!dndEnabled && e.dataTransfer.types.includes("text/uri-list")) {
+          e.preventDefault();
+        }
+      }}
+      onDrop={(e) => {
+        const droppedPaths = extractDroppedPaths(e.dataTransfer);
+        if (droppedPaths.length === 0) return;
+        e.preventDefault();
+        void (async () => {
+          for (const p of droppedPaths) {
+            await openFile(p);
+          }
+        })();
+      }}
+    >
       {groups.map((group) => {
         const groupTabs = tabsByGroup.get(group.id) ?? [];
         if (groupTabs.length === 0) return null;
@@ -257,9 +316,6 @@ export function OpenEditorsView({
 /** Collapsible OPEN EDITORS section; hidden entirely when there are no tabs. */
 export function OpenEditorsPane() {
   const { tabs, isDirty } = useEditorSession();
-  if (tabs.length === 0) {
-    return null;
-  }
   const [sortMode, setSortMode] = useState<OpenEditorsSortMode>(() =>
     readOpenEditorsSortMode(),
   );
@@ -283,6 +339,10 @@ export function OpenEditorsPane() {
   }, [tabs, sortMode]);
 
   const dirtyCount = tabs.reduce((count, t) => count + (isDirty(t.id) ? 1 : 0), 0);
+
+  if (tabs.length === 0) {
+    return null;
+  }
 
   return (
     <WorkbenchSidebarSection

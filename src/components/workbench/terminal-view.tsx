@@ -423,20 +423,27 @@ export function TerminalView() {
                   className="bg-background h-full w-full overflow-hidden rounded-sm"
                 />
               </div>
-              <aside className="bg-muted w-36 shrink-0 border-l border-border">
+              <aside className="bg-background w-36 shrink-0 border-l border-border">
                 <div className="p-1.5">
                   {sessions.map((session) => {
                     const active = session.id === activeSessionId;
                     return (
-                      <button
+                      <div
                         key={session.id}
-                        type="button"
                         className={`mb-1 flex w-full items-center gap-1 rounded-sm px-1.5 py-1 text-left text-[11px] ${
                           active
                             ? "bg-background text-foreground"
                             : "text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground"
                         }`}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => setActiveSessionId(session.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setActiveSessionId(session.id);
+                          }
+                        }}
                       >
                         <span
                           className={`inline-block size-1.5 rounded-full ${
@@ -448,7 +455,19 @@ export function TerminalView() {
                         <span className="min-w-0 flex-1 truncate">
                           {session.name}
                         </span>
-                      </button>
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-foreground inline-flex size-4 items-center justify-center rounded-sm hover:bg-muted/60"
+                          aria-label={`Terminate ${session.name}`}
+                          title="Terminate terminal"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            killTerminalSession(session.id);
+                          }}
+                        >
+                          x
+                        </button>
+                      </div>
                     );
                   })}
                 </div>

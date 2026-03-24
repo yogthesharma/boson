@@ -1,7 +1,17 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 import { IconPlus, IconTrash, IconX } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
-import { registerCommand, unregisterCommand } from "@/extensions/commands/command-service";
+import {
+  registerCommand,
+  unregisterCommand,
+} from "@/extensions/commands/command-service";
 import { clearOutputLines } from "@/components/workbench/panel-output-view";
 import {
   clearActiveTerminalBuffer,
@@ -30,20 +40,26 @@ const PANEL_MAX_HEIGHT = 520;
 
 export function WorkbenchPanel() {
   const { dispatch } = useWorkbenchState();
-  const allViews = useRegistrySubscription(workbenchViewRegistry.subscribe, () =>
-    workbenchViewRegistry.get(),
+  const allViews = useRegistrySubscription(
+    workbenchViewRegistry.subscribe,
+    () => workbenchViewRegistry.get(),
   );
 
   const panelViews = useMemo(
     () =>
-      [...allViews].filter((v) => v.location === "panel").sort((a, b) => a.order - b.order),
+      [...allViews]
+        .filter((v) => v.location === "panel")
+        .sort((a, b) => a.order - b.order),
     [allViews],
   );
 
   const [tabIndex, setTabIndex] = useState(0);
   const [panelHeight, setPanelHeight] = useState<number>(() => {
     if (typeof window === "undefined") return PANEL_DEFAULT_HEIGHT;
-    const raw = Number.parseInt(localStorage.getItem(PANEL_HEIGHT_KEY) ?? "", 10);
+    const raw = Number.parseInt(
+      localStorage.getItem(PANEL_HEIGHT_KEY) ?? "",
+      10,
+    );
     if (Number.isNaN(raw)) return PANEL_DEFAULT_HEIGHT;
     return Math.max(PANEL_MIN_HEIGHT, Math.min(PANEL_MAX_HEIGHT, raw));
   });
@@ -67,14 +83,19 @@ export function WorkbenchPanel() {
     if (defaultTabApplied.current || panelViews.length === 0) {
       return;
     }
-    const saved = typeof window !== "undefined" ? localStorage.getItem(PANEL_TAB_KEY) : null;
+    const saved =
+      typeof window !== "undefined"
+        ? localStorage.getItem(PANEL_TAB_KEY)
+        : null;
     const savedIdx = saved ? panelViews.findIndex((v) => v.id === saved) : -1;
     if (savedIdx >= 0) {
       setTabIndex(savedIdx);
       defaultTabApplied.current = true;
       return;
     }
-    const terminalIdx = panelViews.findIndex((v) => v.id === "workbench.views.terminal");
+    const terminalIdx = panelViews.findIndex(
+      (v) => v.id === "workbench.views.terminal",
+    );
     if (terminalIdx >= 0) {
       setTabIndex(terminalIdx);
     }
@@ -176,7 +197,10 @@ export function WorkbenchPanel() {
       const start = dragStartRef.current;
       if (!start) return;
       const delta = start.y - e.clientY;
-      const next = Math.max(PANEL_MIN_HEIGHT, Math.min(PANEL_MAX_HEIGHT, start.h + delta));
+      const next = Math.max(
+        PANEL_MIN_HEIGHT,
+        Math.min(PANEL_MAX_HEIGHT, start.h + delta),
+      );
       setPanelHeight(next);
     };
     const onUp = () => {
@@ -220,7 +244,7 @@ export function WorkbenchPanel() {
 
   return (
     <div
-      className="flex shrink-0 flex-col border-t border-border bg-muted"
+      className="bg-background flex shrink-0 flex-col border-t border-border"
       style={{ height: `${panelHeight}px` }}
       data-tauri-no-drag
     >
@@ -233,7 +257,7 @@ export function WorkbenchPanel() {
       />
       {showTabs ? (
         <div
-          className="group/paneltabs flex h-8 shrink-0 items-end gap-0 border-b border-border bg-muted px-1 pt-1"
+          className="group/paneltabs bg-background flex h-8 shrink-0 items-end gap-0 px-1 pt-1"
           role="tablist"
           aria-label="Panel"
           onKeyDown={onTabKeyDown}
@@ -259,7 +283,7 @@ export function WorkbenchPanel() {
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
                   selected
                     ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground/90 hover:bg-muted-foreground/8 hover:text-foreground",
+                    : "text-muted-foreground/90 hover:bg-muted/50 hover:text-foreground",
                 )}
                 onClick={() => setTabIndex(i)}
               >
@@ -274,15 +298,15 @@ export function WorkbenchPanel() {
             );
           })}
           <div
-            className="ml-auto flex items-center gap-0.5 border-l border-border/70 pb-1 pl-1 pr-0.5 opacity-75 transition-opacity group-hover/paneltabs:opacity-100 group-focus-within/paneltabs:opacity-100"
+            className="ml-auto flex items-center gap-1 pb-1 pl-1 pr-0.5 opacity-75 transition-opacity group-hover/paneltabs:opacity-100 group-focus-within/paneltabs:opacity-100"
             data-tauri-no-drag
           >
             {activePanelId === "workbench.views.terminal" ? (
               <Button
                 type="button"
                 variant="ghost"
-                size="icon-xs"
-                className="h-5 w-5 text-muted-foreground hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/60"
+                size="icon-sm"
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/60"
                 title="New Terminal"
                 aria-label="New Terminal"
                 onClick={createTerminalSession}
@@ -290,11 +314,12 @@ export function WorkbenchPanel() {
                 <IconPlus size={12} />
               </Button>
             ) : null}
-            {(activePanelId === "workbench.views.terminal" || activePanelId === "workbench.views.output") ? (
+            {activePanelId === "workbench.views.terminal" ||
+            activePanelId === "workbench.views.output" ? (
               <Button
                 type="button"
                 variant="ghost"
-                size="icon-xs"
+                size="icon-sm"
                 className="h-5 w-5 text-muted-foreground hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/60"
                 title="Clear"
                 aria-label="Clear"
@@ -314,7 +339,7 @@ export function WorkbenchPanel() {
             <Button
               type="button"
               variant="ghost"
-              size="icon-xs"
+              size="icon-sm"
               className="h-5 w-5 text-muted-foreground hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/60"
               title="Close Panel"
               aria-label="Close Panel"
@@ -325,7 +350,7 @@ export function WorkbenchPanel() {
           </div>
         </div>
       ) : panelViews[0].title.trim() ? (
-        <div className="flex h-8 shrink-0 items-center border-b border-border px-3 text-sm font-medium">
+        <div className="bg-background flex h-8 shrink-0 items-center border-b border-border px-3 text-sm font-medium">
           {panelViews[0].title}
         </div>
       ) : null}
@@ -334,9 +359,11 @@ export function WorkbenchPanel() {
         id={`panel-view-${activePanelId}`}
         role="tabpanel"
         aria-labelledby={showTabs ? `panel-tab-${activePanelId}` : undefined}
-        className="min-h-0 flex-1 overflow-hidden bg-background"
+        className="bg-background min-h-0 flex-1 overflow-hidden"
       >
-        {active ? <div className="h-full min-h-0 overflow-auto">{active.render()}</div> : null}
+        {active ? (
+          <div className="h-full min-h-0 overflow-auto">{active.render()}</div>
+        ) : null}
       </div>
     </div>
   );

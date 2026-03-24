@@ -12,7 +12,10 @@ import { useEditorSession } from "@/editor/editor-session-context";
 import { workbenchStatusBarRegistry } from "./registry";
 import { useRegistrySubscription } from "./use-registry-subscription";
 import { useWorkbenchState } from "./workbench-state";
-import type { StatusBarItemContribution, StatusBarVisibilityContext } from "./types";
+import type {
+  StatusBarItemContribution,
+  StatusBarVisibilityContext,
+} from "./types";
 
 function StatusBarItem({
   children,
@@ -60,7 +63,10 @@ function StatusBarItem({
   );
 }
 
-function sortStatusItems(a: StatusBarItemContribution, b: StatusBarItemContribution): number {
+function sortStatusItems(
+  a: StatusBarItemContribution,
+  b: StatusBarItemContribution,
+): number {
   if (a.order !== b.order) return a.order - b.order;
   return (b.priority ?? 0) - (a.priority ?? 0);
 }
@@ -76,7 +82,10 @@ function resolveAriaLabel(item: StatusBarItemContribution): string | undefined {
   return undefined;
 }
 
-function fitByPriority(items: StatusBarItemContribution[], maxCount: number): StatusBarItemContribution[] {
+function fitByPriority(
+  items: StatusBarItemContribution[],
+  maxCount: number,
+): StatusBarItemContribution[] {
   if (items.length <= maxCount) return items;
   const selected = [...items]
     .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))
@@ -97,8 +106,9 @@ export function WorkbenchStatusBar() {
   const {
     state: { panelVisible, primarySidebarVisible, auxiliaryBarVisible },
   } = useWorkbenchState();
-  const items = useRegistrySubscription(workbenchStatusBarRegistry.subscribe, () =>
-    workbenchStatusBarRegistry.get(),
+  const items = useRegistrySubscription(
+    workbenchStatusBarRegistry.subscribe,
+    () => workbenchStatusBarRegistry.get(),
   );
 
   const visibilityContext = useMemo<StatusBarVisibilityContext>(
@@ -133,28 +143,29 @@ export function WorkbenchStatusBar() {
         .sort(sortStatusItems),
     [items, width, visibilityContext],
   );
-  const right = useMemo(
-    () => {
-      const visible = [...items]
-        .filter(
-          (i) =>
-            i.alignment === "right" &&
-            (i.when ? i.when(visibilityContext) : true) &&
-            (!i.minVisibleWidth || width >= i.minVisibleWidth),
-        )
-        .sort(sortStatusItems);
+  const right = useMemo(() => {
+    const visible = [...items]
+      .filter(
+        (i) =>
+          i.alignment === "right" &&
+          (i.when ? i.when(visibilityContext) : true) &&
+          (!i.minVisibleWidth || width >= i.minVisibleWidth),
+      )
+      .sort(sortStatusItems);
 
-      const maxCount =
-        width < 620 ? 2 :
-        width < 760 ? 3 :
-        width < 920 ? 4 :
-        width < 1080 ? 5 :
-        Number.POSITIVE_INFINITY;
+    const maxCount =
+      width < 620
+        ? 2
+        : width < 760
+          ? 3
+          : width < 920
+            ? 4
+            : width < 1080
+              ? 5
+              : Number.POSITIVE_INFINITY;
 
-      return fitByPriority(visible, maxCount);
-    },
-    [items, width, visibilityContext],
-  );
+    return fitByPriority(visible, maxCount);
+  }, [items, width, visibilityContext]);
 
   const overflowItems = useMemo(() => {
     const allVisibleRight = [...items]
@@ -175,7 +186,7 @@ export function WorkbenchStatusBar() {
       role="status"
       aria-live="polite"
       aria-label="Status bar"
-      className="flex h-[22px] shrink-0 items-center border-t border-border bg-muted px-1.5 text-[11px] text-foreground"
+      className="flex h-[22px] shrink-0 items-center border-t border-border bg-background px-1.5 text-[11px] text-foreground"
     >
       <div className="flex min-w-0 flex-1 items-center gap-0.5">
         {left.map((item) => (
@@ -185,9 +196,7 @@ export function WorkbenchStatusBar() {
             title={item.tooltip}
             ariaLabel={resolveAriaLabel(item)}
             onActivate={
-              item.commandId
-                ? () => runStatusCommand(item)
-                : undefined
+              item.commandId ? () => runStatusCommand(item) : undefined
             }
           >
             {resolveItemContent(item)}
@@ -203,9 +212,7 @@ export function WorkbenchStatusBar() {
             title={item.tooltip}
             ariaLabel={resolveAriaLabel(item)}
             onActivate={
-              item.commandId
-                ? () => runStatusCommand(item)
-                : undefined
+              item.commandId ? () => runStatusCommand(item) : undefined
             }
           >
             {resolveItemContent(item)}

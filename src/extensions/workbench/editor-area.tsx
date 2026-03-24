@@ -9,7 +9,10 @@ import {
 } from "@tabler/icons-react";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { registerCommand, unregisterCommand } from "@/extensions/commands/command-service";
+import {
+  registerCommand,
+  unregisterCommand,
+} from "@/extensions/commands/command-service";
 import { cn } from "@/lib/utils";
 import { MonacoEditorPane } from "@/editor/monaco-editor-pane";
 import { useEditorSession } from "@/editor/editor-session-context";
@@ -33,7 +36,8 @@ export function EditorArea() {
     toggleEol,
     showMessage,
   } = useEditorSession();
-  const { rootPath, recentProjects, openProjectDialog, setWorkspaceRoot } = useWorkspace();
+  const { rootPath, recentProjects, openProjectDialog, setWorkspaceRoot } =
+    useWorkspace();
 
   const showOnboarding = tabs.length === 0 && !rootPath;
   const showNoFileState = tabs.length === 0 && !!rootPath;
@@ -76,7 +80,9 @@ export function EditorArea() {
                 key={t.id}
                 className={cn(
                   "flex h-7 max-w-[10rem] shrink-0 items-center rounded-t border border-transparent border-b-0",
-                  active ? "border-border bg-muted" : "bg-transparent hover:bg-muted/60",
+                  active
+                    ? "border-border bg-muted/30"
+                    : "bg-transparent hover:bg-muted/60",
                 )}
               >
                 <button
@@ -108,7 +114,13 @@ export function EditorArea() {
       {editorError ? (
         <div className="text-destructive flex shrink-0 items-center justify-between gap-2 border-b border-destructive/30 bg-destructive/10 px-2 py-1 text-xs">
           <span className="min-w-0 truncate">{editorError}</span>
-          <Button type="button" variant="ghost" size="xs" className="h-6 shrink-0" onClick={clearError}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="h-6 shrink-0"
+            onClick={clearError}
+          >
             Dismiss
           </Button>
         </div>
@@ -118,8 +130,12 @@ export function EditorArea() {
         {showOnboarding ? (
           <div className="bg-background text-foreground flex h-full flex-col items-center justify-center gap-6">
             <div className="text-center">
-              <div className="mb-1 text-3xl font-semibold tracking-tight">BOSON</div>
-              <div className="text-muted-foreground text-sm">Open a project to get started</div>
+              <div className="mb-1 text-3xl font-semibold tracking-tight">
+                BOSON
+              </div>
+              <div className="text-muted-foreground text-sm">
+                Open a project to get started
+              </div>
             </div>
             <div className="flex gap-3">
               <button
@@ -144,7 +160,9 @@ export function EditorArea() {
             </div>
             {recentProjects.length > 0 ? (
               <div className="w-full max-w-xl">
-                <div className="text-muted-foreground mb-2 text-xs">Recent projects</div>
+                <div className="text-muted-foreground mb-2 text-xs">
+                  Recent projects
+                </div>
                 <div className="space-y-1">
                   {recentProjects.slice(0, 5).map((p) => (
                     <button
@@ -153,8 +171,12 @@ export function EditorArea() {
                       className="hover:bg-muted flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm"
                       onClick={() => setWorkspaceRoot(p)}
                     >
-                      <span className="truncate pr-3">{p.split(/[/\\]/).pop() ?? p}</span>
-                      <span className="text-muted-foreground truncate text-xs">{p}</span>
+                      <span className="truncate pr-3">
+                        {p.split(/[/\\]/).pop() ?? p}
+                      </span>
+                      <span className="text-muted-foreground truncate text-xs">
+                        {p}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -165,30 +187,46 @@ export function EditorArea() {
           <div className="flex h-full flex-col items-center justify-center gap-4 text-center text-muted-foreground">
             <IconCode size={48} className="opacity-70" />
             <div className="space-y-1">
-              <div className="text-foreground text-base font-medium">No file is open</div>
-              <div className="text-sm">Open a file from Explorer or use one of these shortcuts</div>
+              <div className="text-foreground text-base font-medium">
+                No file is open
+              </div>
+              <div className="text-sm">
+                Open a file from Explorer or use one of these shortcuts
+              </div>
             </div>
             <div className="space-y-2 text-sm">
               <div className="flex items-center justify-between gap-8 rounded bg-muted px-3 py-1.5">
                 <span>New Agent</span>
-                <span className="text-xs"><IconCommand size={12} className="mr-1 inline" />L</span>
+                <span className="text-xs">
+                  <IconCommand size={12} className="mr-1 inline" />L
+                </span>
               </div>
               <div className="flex items-center justify-between gap-8 rounded bg-muted px-3 py-1.5">
                 <span>Hide Terminal</span>
-                <span className="text-xs"><IconCommand size={12} className="mr-1 inline" />J</span>
+                <span className="text-xs">
+                  <IconCommand size={12} className="mr-1 inline" />J
+                </span>
               </div>
               <div className="flex items-center justify-between gap-8 rounded bg-muted px-3 py-1.5">
                 <span>Search Files</span>
-                <span className="text-xs"><IconCommand size={12} className="mr-1 inline" />P</span>
+                <span className="text-xs">
+                  <IconCommand size={12} className="mr-1 inline" />P
+                </span>
               </div>
               <div className="flex items-center justify-between gap-8 rounded bg-muted px-3 py-1.5">
                 <span>Open Browser</span>
-                <span className="text-xs"><IconTerminal2 size={12} className="mr-1 inline" />B</span>
+                <span className="text-xs">
+                  <IconTerminal2 size={12} className="mr-1 inline" />B
+                </span>
               </div>
             </div>
           </div>
         ) : (
-          <MonacoEditorPane theme={monacoTheme} onMount={bindEditor} onUnmount={unbindEditor} />
+          <MonacoEditorPane
+            theme={monacoTheme}
+            onMount={bindEditor}
+            onUnmount={unbindEditor}
+          />
         )}
       </div>
     </div>
