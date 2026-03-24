@@ -4,6 +4,10 @@ Boson is an open-source, local-first coding workbench focused on direct AI opera
 
 The goal is simple: developers should be able to use powerful coding operators without being locked into a single paid editor vendor.
 
+<p align="center">
+  <img src="./boson.png" alt="Boson workbench preview" width="1100" />
+</p>
+
 ## Why Boson
 
 - Local-first architecture built on Tauri.
