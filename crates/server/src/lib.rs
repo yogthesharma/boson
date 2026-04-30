@@ -88,7 +88,7 @@ fn default_snapshot() -> WorkspaceSnapshot {
     WorkspaceSnapshot {
         project: routepad_core::schema::ProjectConfig {
             schema_version: "1".to_string(),
-            name: "Routepad".to_string(),
+            name: "Boson".to_string(),
             default_environment: "local".to_string(),
         },
         environments: Vec::new(),

@@ -1,4 +1,4 @@
-# Routepad (Boson Routes)
+# Boson
 
 Repo-native API workspace where `.api/` JSON files are the source of truth.
 

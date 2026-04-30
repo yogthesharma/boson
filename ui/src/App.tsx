@@ -18,7 +18,7 @@ export function App() {
   return (
     <main style={{ display: "grid", gridTemplateColumns: "280px 1fr", minHeight: "100vh", fontFamily: "sans-serif" }}>
       <aside style={{ borderRight: "1px solid #ddd", padding: 16 }}>
-        <h2>Routepad</h2>
+        <h2>Boson</h2>
         <p style={{ color: "#666" }}>Read-only API workspace</p>
         <p><strong>Env:</strong> {activeEnv}</p>
         <hr />
@@ -34,7 +34,7 @@ export function App() {
       </aside>
       <section style={{ padding: 16 }}>
         <h3>Request Preview</h3>
-        {!selectedRoute && <p>No routes found. Run `routepad init` first.</p>}
+        {!selectedRoute && <p>No routes found. Run `boson init` first.</p>}
         {selectedRoute && (
           <>
             <p><strong>ID:</strong> {selectedRoute.id}</p>

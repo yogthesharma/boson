@@ -6,7 +6,7 @@ use std::{fs, net::SocketAddr, path::PathBuf};
 use tracing::info;
 
 #[derive(Parser, Debug)]
-#[command(name = "routepad", about = "Repo-native API workspace")]
+#[command(name = "boson", about = "Repo-native API workspace")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -57,7 +57,7 @@ fn init_workspace(root_dir: &PathBuf) -> Result<()> {
         &api_dir.join("project.json"),
         r#"{
   "schema_version": "1",
-  "name": "Routepad Project",
+  "name": "Boson Project",
   "default_environment": "local"
 }
 "#,

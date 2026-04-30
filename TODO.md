@@ -1,4 +1,4 @@
-# Routepad MVP TODOs
+# Boson MVP TODOs
 
 ## 0) Foundation (now)
 - [x] Create modular workspace (`core`, `server`, `cli`, `ui`)
@@ -13,10 +13,10 @@
 - [ ] Add JSON schema docs + examples
 
 ## 2) CLI
-- [ ] `routepad init` to scaffold `.api/`
-- [ ] `routepad dev` to launch local UI server + watcher
-- [ ] `routepad run <route-id>` to execute one route
-- [ ] `routepad test` for suite execution
+- [ ] `boson init` to scaffold `.api/`
+- [ ] `boson dev` to launch local UI server + watcher
+- [ ] `boson run <route-id>` to execute one route
+- [ ] `boson test` for suite execution
 
 ## 3) Local Server
 - [ ] Implement `GET /health`
@@ -35,7 +35,7 @@
 ## 5) Quality
 - [ ] Add unit tests in `core` for parsing/validation/interpolation
 - [ ] Add integration tests for server endpoints
-- [ ] Add smoke test for `routepad dev`
+- [ ] Add smoke test for `boson dev`
 - [ ] Add CI (`cargo test`, UI build, lint)
 
 ## 6) Scale-Ready Next
