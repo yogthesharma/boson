@@ -13,9 +13,9 @@
 - [ ] Add JSON schema docs + examples
 
 ## 2) CLI
-- [ ] `boson init` to scaffold `.api/`
-- [ ] `boson dev` to launch local UI server + watcher
-- [ ] `boson run <route-id>` to execute one route
+- [x] `boson init` to scaffold `.api/`
+- [x] `boson dev` to launch local UI server + watcher
+- [ ] `boson run <route-id>` to execute one route (currently validates/loads route only)
 - [ ] `boson test` for suite execution
 
 ## 3) Local Server
@@ -39,9 +39,9 @@
 - [x] Add search filters (method/group/failed-only) in command palette
 - [x] Add compact environment indicator in sidebar footer
 - [x] Persist collection/folder collapse state in local storage
-- [x] Add run controls for route and collection in sidebar
+- [x] Remove run controls from sidebar rows (run action stays in main request panel)
 - [ ] Environment switcher
-- [ ] Last run history panel
+- [x] Last run history panel (Timeline tab with clear + local persistence)
 - [x] Switch from fixed polling to SSE-driven live refresh (with polling fallback)
 
 ## 4.1) Collections and Folders
@@ -54,6 +54,16 @@
 - [ ] Add integration tests for server endpoints
 - [ ] Add smoke test for `boson dev`
 - [ ] Add CI (`cargo test`, UI build, lint)
+
+## 7) Response Workbench (Completed in MVP)
+- [x] Interactive JSON response viewer using Monaco (folding, line numbers, transparent background)
+- [x] Custom in-editor search UI (open/find/next/prev/count/no-match state)
+- [x] Capture and display response headers from backend execution
+- [x] Header table improvements (scroll-fit layout, filter, copy visible rows)
+- [x] Timeline table improvements (table-style parity with headers, clear action, persisted history)
+- [x] Tests UI improvements (table-style results with PASS/FAIL badges + loading/empty states)
+- [x] Extend route test engine: `status`, `header_exists`, `header_equals`, `body_path_exists`, `body_path_equals`, `response_time_ms`
+- [x] Toolbar response metadata polish (status, duration, size, tests passed/total)
 
 ## 6) Scale-Ready Next
 - [ ] Split runtime traits for local/cloud execution backends
