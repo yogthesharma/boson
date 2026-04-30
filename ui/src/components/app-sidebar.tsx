@@ -120,7 +120,7 @@ export function AppSidebar({
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
+            <SidebarMenuButton className="!pt-0" size="lg" asChild>
               <div className="flex w-full items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2.5">
                   <BosonLogo
@@ -148,7 +148,6 @@ export function AppSidebar({
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Routes</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {isLoading && (
