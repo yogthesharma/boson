@@ -3,6 +3,12 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { AppSidebar } from "@/components/app-sidebar"
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar"
 import {
   getEnvironments,
   getRoutes,
@@ -20,6 +26,7 @@ export function App() {
   const [isRunning, setIsRunning] = useState(false)
   const [error, setError] = useState<string>("")
   const [result, setResult] = useState<RunResult | null>(null)
+  const [syncToken, setSyncToken] = useState(0)
 
   useEffect(() => {
     let mounted = true
@@ -34,6 +41,7 @@ export function App() {
         if (!mounted) return
         setRoutes(routesData)
         setEnvironments(envData)
+        setSyncToken((value) => value + 1)
         if (routesData.length > 0 && !selectedRouteId) {
           setSelectedRouteId(routesData[0].id)
         }
@@ -75,48 +83,25 @@ export function App() {
   }
 
   return (
-    <main className="grid min-h-svh grid-cols-[300px_1fr] bg-background text-foreground">
-      <aside className="border-r p-4">
-        <div className="mb-4">
-          <h1 className="text-xl font-semibold">Boson</h1>
-          <p className="text-sm text-muted-foreground">
-            Repo-native API workspace
-          </p>
-          <div className="mt-2 text-xs text-muted-foreground">
-            Environment: <span className="font-medium">{activeEnvironment}</span>
+    <SidebarProvider>
+      <AppSidebar
+        routes={routes}
+        selectedRouteId={selectedRoute?.id}
+        onSelectRoute={setSelectedRouteId}
+        activeEnvironment={activeEnvironment}
+        isLoading={isLoading}
+        syncToken={syncToken}
+      />
+      <SidebarInset>
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
+          <SidebarTrigger />
+          <Separator orientation="vertical" className="mr-2 h-4" />
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="text-sm text-muted-foreground">Repo-native API workspace</p>
+            {selectedRoute && <Badge variant="outline">{selectedRoute.method}</Badge>}
           </div>
-        </div>
-        <Separator />
-        <div className="mt-4 space-y-2">
-          {isLoading && (
-            <p className="text-sm text-muted-foreground">Loading routes...</p>
-          )}
-          {!isLoading && routes.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              No routes found. Run <code>boson init</code>.
-            </p>
-          )}
-          {routes.map((route) => (
-            <button
-              key={route.id}
-              onClick={() => setSelectedRouteId(route.id)}
-              className={`w-full rounded-md border p-3 text-left transition hover:bg-accent ${
-                selectedRoute?.id === route.id ? "bg-accent" : ""
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate font-medium">{route.name}</span>
-                <Badge variant="secondary">{route.method}</Badge>
-              </div>
-              <p className="mt-1 truncate text-xs text-muted-foreground">
-                {route.path}
-              </p>
-            </button>
-          ))}
-        </div>
-      </aside>
-
-      <section className="space-y-4 p-6">
+        </header>
+        <section className="space-y-4 p-6">
         {error && (
           <Card className="border-destructive/40">
             <CardContent className="pt-6 text-sm text-destructive">
@@ -192,8 +177,9 @@ export function App() {
             )}
           </CardContent>
         </Card>
-      </section>
-    </main>
+        </section>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
 
