@@ -1,40 +1,45 @@
 export type RouteDefinition = {
-  id: string;
-  name: string;
-  method: string;
-  path: string;
-  group?: string;
-};
+  id: string
+  name: string
+  method: string
+  path: string
+  group?: string
+}
 
 export type EnvironmentConfig = {
-  name: string;
-  variables: Record<string, string>;
-};
+  name: string
+  variables: Record<string, string>
+}
 
 export type RunResult = {
-  route_id: string;
-  status: number;
-  elapsed_ms: number;
-  response_body?: unknown;
-  test_results: Array<{ passed: boolean; message: string }>;
-};
-
-const API_BASE = "http://127.0.0.1:8787";
-
-export async function fetchRoutes(): Promise<RouteDefinition[]> {
-  const response = await fetch(`${API_BASE}/api/routes`);
-  if (!response.ok) throw new Error("failed to fetch routes");
-  return response.json();
+  route_id: string
+  status: number
+  elapsed_ms: number
+  response_body?: unknown
+  test_results: Array<{ passed: boolean; message: string }>
 }
 
-export async function fetchEnvironments(): Promise<EnvironmentConfig[]> {
-  const response = await fetch(`${API_BASE}/api/environments`);
-  if (!response.ok) throw new Error("failed to fetch environments");
-  return response.json();
+const API_BASE =
+  import.meta.env.VITE_BOSON_API_BASE?.trim() || "http://127.0.0.1:8787"
+
+async function readJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
+  const response = await fetch(input, init)
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`)
+  }
+  return response.json() as Promise<T>
 }
 
-export async function runRoute(routeId: string): Promise<RunResult> {
-  const response = await fetch(`${API_BASE}/api/run/${routeId}`, { method: "POST" });
-  if (!response.ok) throw new Error("route run failed");
-  return response.json();
+export function getRoutes(): Promise<RouteDefinition[]> {
+  return readJson<RouteDefinition[]>(`${API_BASE}/api/routes`)
+}
+
+export function getEnvironments(): Promise<EnvironmentConfig[]> {
+  return readJson<EnvironmentConfig[]>(`${API_BASE}/api/environments`)
+}
+
+export function runRoute(routeId: string): Promise<RunResult> {
+  return readJson<RunResult>(`${API_BASE}/api/run/${routeId}`, {
+    method: "POST",
+  })
 }

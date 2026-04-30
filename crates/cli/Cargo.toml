@@ -1,5 +1,5 @@
 [package]
-name = "routepad-cli"
+name = "boson-cli"
 edition.workspace = true
 license.workspace = true
 version.workspace = true
@@ -12,5 +12,5 @@ serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-routepad-core = { path = "../core" }
-routepad-server = { path = "../server" }
+boson-core = { path = "../core" }
+boson-server = { path = "../server" }

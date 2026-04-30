@@ -158,6 +158,45 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
 
 [[package]]
+name = "boson-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "boson-core",
+ "boson-server",
+ "clap",
+ "notify",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "boson-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "reqwest",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "boson-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "boson-core",
+ "reqwest",
+ "serde",
+ "tokio",
+ "tower-http 0.5.2",
+ "tracing",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1036,45 +1075,6 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "routepad-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "notify",
- "routepad-core",
- "routepad-server",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "routepad-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "reqwest",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "routepad-server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "reqwest",
- "routepad-core",
- "serde",
- "tokio",
- "tower-http 0.5.2",
- "tracing",
 ]
 
 [[package]]

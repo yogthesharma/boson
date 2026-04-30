@@ -6,14 +6,14 @@ use axum::{
     Json, Router,
 };
 use reqwest::Client;
-use routepad_core::{
+use boson_core::{
     execution::{run_route, RunResult},
     loader::load_workspace,
     schema::{EnvironmentConfig, RouteDefinition, WorkspaceSnapshot},
 };
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::net::TcpListener;
-use tower_http::trace::TraceLayer;
+use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -35,6 +35,7 @@ pub async fn run_local_server(root_dir: PathBuf, base_url: String, addr: SocketA
         .route("/api/environments", get(list_environments))
         .route("/api/run/:route_id", post(run_route_handler))
         .with_state(state)
+        .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http());
 
     let listener = TcpListener::bind(addr).await?;
@@ -86,7 +87,7 @@ fn read_snapshot(state: &AppState) -> Result<WorkspaceSnapshot> {
 
 fn default_snapshot() -> WorkspaceSnapshot {
     WorkspaceSnapshot {
-        project: routepad_core::schema::ProjectConfig {
+        project: boson_core::schema::ProjectConfig {
             schema_version: "1".to_string(),
             name: "Boson".to_string(),
             default_environment: "local".to_string(),

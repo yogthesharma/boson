@@ -1,99 +1,200 @@
-import { useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { fetchEnvironments, fetchRoutes, runRoute, type RouteDefinition } from "./api";
+import { useEffect, useMemo, useState } from "react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
+import {
+  getEnvironments,
+  getRoutes,
+  runRoute,
+  type EnvironmentConfig,
+  type RouteDefinition,
+  type RunResult,
+} from "@/api"
 
 export function App() {
-  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
-  const routesQuery = useQuery({ queryKey: ["routes"], queryFn: fetchRoutes, refetchInterval: 2000 });
-  const envsQuery = useQuery({ queryKey: ["environments"], queryFn: fetchEnvironments, refetchInterval: 2000 });
-  const runMutation = useMutation({ mutationFn: runRoute });
+  const [routes, setRoutes] = useState<RouteDefinition[]>([])
+  const [environments, setEnvironments] = useState<EnvironmentConfig[]>([])
+  const [selectedRouteId, setSelectedRouteId] = useState<string>("")
+  const [isLoading, setIsLoading] = useState(true)
+  const [isRunning, setIsRunning] = useState(false)
+  const [error, setError] = useState<string>("")
+  const [result, setResult] = useState<RunResult | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+    const load = async () => {
+      setIsLoading(true)
+      setError("")
+      try {
+        const [routesData, envData] = await Promise.all([
+          getRoutes(),
+          getEnvironments(),
+        ])
+        if (!mounted) return
+        setRoutes(routesData)
+        setEnvironments(envData)
+        if (routesData.length > 0 && !selectedRouteId) {
+          setSelectedRouteId(routesData[0].id)
+        }
+      } catch (err) {
+        if (!mounted) return
+        setError(err instanceof Error ? err.message : "Failed to load workspace")
+      } finally {
+        if (mounted) setIsLoading(false)
+      }
+    }
+
+    load()
+    const timer = window.setInterval(load, 2500)
+    return () => {
+      mounted = false
+      window.clearInterval(timer)
+    }
+  }, [selectedRouteId])
 
   const selectedRoute = useMemo(
-    () => routesQuery.data?.find((route) => route.id === selectedRouteId) ?? routesQuery.data?.[0],
-    [routesQuery.data, selectedRouteId],
-  );
+    () => routes.find((r) => r.id === selectedRouteId) ?? routes[0],
+    [routes, selectedRouteId]
+  )
 
-  const activeEnv = envsQuery.data?.[0]?.name ?? "n/a";
+  const activeEnvironment = environments[0]?.name ?? "n/a"
+
+  const handleRun = async () => {
+    if (!selectedRoute) return
+    setIsRunning(true)
+    setError("")
+    try {
+      const runResult = await runRoute(selectedRoute.id)
+      setResult(runResult)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Run failed")
+    } finally {
+      setIsRunning(false)
+    }
+  }
 
   return (
-    <main style={{ display: "grid", gridTemplateColumns: "280px 1fr", minHeight: "100vh", fontFamily: "sans-serif" }}>
-      <aside style={{ borderRight: "1px solid #ddd", padding: 16 }}>
-        <h2>Boson</h2>
-        <p style={{ color: "#666" }}>Read-only API workspace</p>
-        <p><strong>Env:</strong> {activeEnv}</p>
-        <hr />
-        {routesQuery.isLoading && <p>Loading routes...</p>}
-        {routesQuery.data?.map((route) => (
-          <RouteItem
-            key={route.id}
-            route={route}
-            selected={selectedRoute?.id === route.id}
-            onClick={() => setSelectedRouteId(route.id)}
-          />
-        ))}
-      </aside>
-      <section style={{ padding: 16 }}>
-        <h3>Request Preview</h3>
-        {!selectedRoute && <p>No routes found. Run `boson init` first.</p>}
-        {selectedRoute && (
-          <>
-            <p><strong>ID:</strong> {selectedRoute.id}</p>
-            <p><strong>Name:</strong> {selectedRoute.name}</p>
-            <p><strong>Method:</strong> {selectedRoute.method}</p>
-            <p><strong>Path:</strong> {selectedRoute.path}</p>
+    <main className="grid min-h-svh grid-cols-[300px_1fr] bg-background text-foreground">
+      <aside className="border-r p-4">
+        <div className="mb-4">
+          <h1 className="text-xl font-semibold">Boson</h1>
+          <p className="text-sm text-muted-foreground">
+            Repo-native API workspace
+          </p>
+          <div className="mt-2 text-xs text-muted-foreground">
+            Environment: <span className="font-medium">{activeEnvironment}</span>
+          </div>
+        </div>
+        <Separator />
+        <div className="mt-4 space-y-2">
+          {isLoading && (
+            <p className="text-sm text-muted-foreground">Loading routes...</p>
+          )}
+          {!isLoading && routes.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No routes found. Run <code>boson init</code>.
+            </p>
+          )}
+          {routes.map((route) => (
             <button
-              onClick={() => runMutation.mutate(selectedRoute.id)}
-              disabled={runMutation.isPending}
+              key={route.id}
+              onClick={() => setSelectedRouteId(route.id)}
+              className={`w-full rounded-md border p-3 text-left transition hover:bg-accent ${
+                selectedRoute?.id === route.id ? "bg-accent" : ""
+              }`}
             >
-              {runMutation.isPending ? "Running..." : "Run Request"}
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate font-medium">{route.name}</span>
+                <Badge variant="secondary">{route.method}</Badge>
+              </div>
+              <p className="mt-1 truncate text-xs text-muted-foreground">
+                {route.path}
+              </p>
             </button>
-          </>
+          ))}
+        </div>
+      </aside>
+
+      <section className="space-y-4 p-6">
+        {error && (
+          <Card className="border-destructive/40">
+            <CardContent className="pt-6 text-sm text-destructive">
+              {error}
+            </CardContent>
+          </Card>
         )}
 
-        <hr />
-        <h3>Response</h3>
-        {!runMutation.data && <p>No run yet.</p>}
-        {runMutation.data && (
-          <>
-            <p><strong>Status:</strong> {runMutation.data.status}</p>
-            <p><strong>Time:</strong> {runMutation.data.elapsed_ms} ms</p>
-            <pre style={{ background: "#f4f4f4", padding: 12, overflow: "auto" }}>
-              {JSON.stringify(runMutation.data.response_body ?? {}, null, 2)}
-            </pre>
-            <h4>Tests</h4>
-            <ul>
-              {runMutation.data.test_results.map((result, index) => (
-                <li key={index}>
-                  {result.passed ? "PASS" : "FAIL"} - {result.message}
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
+        <Card>
+          <CardHeader>
+            <CardTitle>Request Preview</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {!selectedRoute && (
+              <p className="text-muted-foreground">Select a route to continue.</p>
+            )}
+            {selectedRoute && (
+              <>
+                <p>
+                  <span className="font-medium">ID:</span> {selectedRoute.id}
+                </p>
+                <p>
+                  <span className="font-medium">Name:</span> {selectedRoute.name}
+                </p>
+                <p>
+                  <span className="font-medium">Method:</span>{" "}
+                  {selectedRoute.method}
+                </p>
+                <p>
+                  <span className="font-medium">Path:</span> {selectedRoute.path}
+                </p>
+                <Button onClick={handleRun} disabled={isRunning}>
+                  {isRunning ? "Running..." : "Run Request"}
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Response</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            {!result && (
+              <p className="text-muted-foreground">No request executed yet.</p>
+            )}
+            {result && (
+              <>
+                <p>
+                  <span className="font-medium">Status:</span> {result.status}
+                </p>
+                <p>
+                  <span className="font-medium">Time:</span> {result.elapsed_ms} ms
+                </p>
+                <div>
+                  <p className="mb-1 font-medium">Body</p>
+                  <pre className="max-h-72 overflow-auto rounded-md border bg-muted p-3 text-xs">
+                    {JSON.stringify(result.response_body ?? {}, null, 2)}
+                  </pre>
+                </div>
+                <div>
+                  <p className="mb-1 font-medium">Tests</p>
+                  <ul className="space-y-1">
+                    {result.test_results.map((test, index) => (
+                      <li key={index}>
+                        {test.passed ? "PASS" : "FAIL"} - {test.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
       </section>
     </main>
-  );
+  )
 }
 
-function RouteItem(props: { route: RouteDefinition; selected: boolean; onClick: () => void }) {
-  const { route, selected, onClick } = props;
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        width: "100%",
-        textAlign: "left",
-        marginBottom: 8,
-        border: "1px solid #ddd",
-        padding: "8px 10px",
-        background: selected ? "#eef6ff" : "white",
-        cursor: "pointer",
-      }}
-    >
-      <div style={{ fontWeight: 600 }}>{route.name}</div>
-      <div style={{ color: "#444", fontSize: 12 }}>
-        {route.method} {route.path}
-      </div>
-    </button>
-  );
-}
+export default App

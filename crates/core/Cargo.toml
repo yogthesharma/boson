@@ -1,5 +1,5 @@
 [package]
-name = "routepad-core"
+name = "boson-core"
 edition.workspace = true
 license.workspace = true
 version.workspace = true
