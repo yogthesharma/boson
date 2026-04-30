@@ -1,11 +1,13 @@
 use anyhow::Result;
 use axum::{
+    body::Bytes,
     extract::{Path, State},
+    http::Method,
     response::{
         sse::{Event, KeepAlive, Sse},
         IntoResponse,
     },
-    routing::{get, post},
+    routing::{any, get, post},
     Json, Router,
 };
 use boson_core::{
@@ -47,6 +49,8 @@ pub async fn run_local_server(root_dir: PathBuf, base_url: String, addr: SocketA
         .route("/api/environments", get(list_environments))
         .route("/api/run/:route_id", post(run_route_handler))
         .route("/api/events", get(events_handler))
+        .route("/demo/rest/resource", any(rest_resource_handler))
+        .route("/demo/rest/search", get(rest_search_handler))
         .with_state(state)
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http());
@@ -113,6 +117,75 @@ async fn events_handler(
     });
 
     Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+async fn rest_resource_handler(
+    method: Method,
+    body: Bytes,
+) -> Result<impl IntoResponse, axum::http::StatusCode> {
+    let payload = if body.is_empty() {
+        None
+    } else {
+        serde_json::from_slice::<serde_json::Value>(&body).ok()
+    };
+
+    match method {
+        Method::GET => Ok((
+            axum::http::StatusCode::OK,
+            Json(serde_json::json!({
+                "method": "GET",
+                "resource": {
+                    "id": "res_001",
+                    "name": "Boson Demo Resource",
+                    "status": "active"
+                }
+            })),
+        )
+            .into_response()),
+        Method::POST => Ok((
+            axum::http::StatusCode::CREATED,
+            Json(serde_json::json!({
+                "method": "POST",
+                "created": true,
+                "input": payload
+            })),
+        )
+            .into_response()),
+        Method::PUT => Ok((
+            axum::http::StatusCode::OK,
+            Json(serde_json::json!({
+                "method": "PUT",
+                "updated": true,
+                "input": payload
+            })),
+        )
+            .into_response()),
+        Method::PATCH => Ok((
+            axum::http::StatusCode::OK,
+            Json(serde_json::json!({
+                "method": "PATCH",
+                "patched": true,
+                "input": payload
+            })),
+        )
+            .into_response()),
+        Method::DELETE => Ok(axum::http::StatusCode::NO_CONTENT.into_response()),
+        Method::HEAD => Ok(axum::http::StatusCode::OK.into_response()),
+        Method::OPTIONS => Ok((
+            axum::http::StatusCode::NO_CONTENT,
+            [("Allow", "GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS")],
+        )
+            .into_response()),
+        _ => Err(axum::http::StatusCode::METHOD_NOT_ALLOWED),
+    }
+}
+
+async fn rest_search_handler() -> impl IntoResponse {
+    Json(serde_json::json!({
+        "method": "GET",
+        "hint": "Add query params to this endpoint from route definitions.",
+        "example": "/demo/rest/search?limit=10&cursor=abc"
+    }))
 }
 
 fn read_snapshot(state: &AppState) -> Result<WorkspaceSnapshot> {

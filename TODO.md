@@ -35,9 +35,19 @@
 - [x] Improve sidebar brand anchor (logo scale + title weight)
 - [x] Convert request details to 2-column definition layout
 - [x] Add response empty/skeleton states for clearer UX
+- [x] Add method + last-run status hints in sidebar route rows
+- [x] Add search filters (method/group/failed-only) in command palette
+- [x] Add compact environment indicator in sidebar footer
+- [x] Persist collection/folder collapse state in local storage
+- [x] Add run controls for route and collection in sidebar
 - [ ] Environment switcher
 - [ ] Last run history panel
 - [x] Switch from fixed polling to SSE-driven live refresh (with polling fallback)
+
+## 4.1) Collections and Folders
+- [x] Infer top-level collections from `.api/routes/**` folder structure
+- [x] Support nested folders in sidebar tree (`Users > Admin > ...`)
+- [x] Keep compatibility for flat route files using `group` as fallback collection
 
 ## 5) Quality
 - [ ] Add unit tests in `core` for parsing/validation/interpolation

@@ -1,6 +1,6 @@
 import type * as React from "react"
 import { useMemo, useState } from "react"
-import { MagnifyingGlass } from "@phosphor-icons/react"
+import { Funnel, MagnifyingGlass } from "@phosphor-icons/react"
 import { Badge } from "@/components/ui/badge"
 import { BosonLogo } from "@/components/boson-logo"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,7 @@ import {
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -23,17 +24,27 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
 import type { RouteDefinition } from "@/api"
+import { methodClass } from "@/components/app-sidebar/styles"
+import {
+  readExpandedState,
+  writeExpandedState,
+} from "@/components/app-sidebar/storage"
+import {
+  flattenLeafRoutes,
+  buildRouteTree,
+} from "@/components/app-sidebar/tree"
+import { TreeNodeView } from "@/components/app-sidebar/tree-node-view"
+import type { RouteStatus } from "@/components/app-sidebar/types"
 
 type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   routes: RouteDefinition[]
   selectedRouteId?: string
   onSelectRoute: (routeId: string) => void
+  lastRunByRoute: Record<string, RouteStatus>
+  activeEnvironment: string
   isLoading: boolean
   syncToken: number
 }
@@ -42,28 +53,82 @@ export function AppSidebar({
   routes,
   selectedRouteId,
   onSelectRoute,
+  lastRunByRoute,
+  activeEnvironment,
   isLoading,
   syncToken,
   ...props
 }: AppSidebarProps) {
   const [search, setSearch] = useState("")
   const [openSearch, setOpenSearch] = useState(false)
-  const grouped = useMemo(() => groupRoutes(routes, search), [routes, search])
+  const [methodFilter, setMethodFilter] = useState<string>("all")
+  const [groupFilter, setGroupFilter] = useState<string>("all")
+  const [failedOnly, setFailedOnly] = useState(false)
+  const [expandedPaths, setExpandedPaths] = useState<Record<string, boolean>>(
+    () => readExpandedState()
+  )
+
+  const filteredRoutes = useMemo(
+    () =>
+      routes.filter((route) => {
+        const query = search.trim().toLowerCase()
+        const searchHaystack =
+          `${route.name} ${route.path} ${route.method} ${route.group ?? ""} ${route.source_path ?? ""}`.toLowerCase()
+        if (query && !searchHaystack.includes(query)) return false
+        if (
+          methodFilter !== "all" &&
+          route.method.toUpperCase() !== methodFilter
+        )
+          return false
+        if (
+          groupFilter !== "all" &&
+          (route.group?.trim() || "Ungrouped") !== groupFilter
+        )
+          return false
+        if (failedOnly && lastRunByRoute[route.id] !== "failed") return false
+        return true
+      }),
+    [routes, search, methodFilter, groupFilter, failedOnly, lastRunByRoute]
+  )
+
+  const tree = useMemo(() => buildRouteTree(filteredRoutes), [filteredRoutes])
+  const collectionOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(routes.map((route) => route.group?.trim() || "Ungrouped"))
+      ),
+    [routes]
+  )
+  const methodOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(routes.map((route) => route.method.toUpperCase()))
+      ).sort(),
+    [routes]
+  )
+
+  const togglePath = (path: string) => {
+    setExpandedPaths((current) => {
+      const next = { ...current, [path]: !current[path] }
+      writeExpandedState(next)
+      return next
+    })
+  }
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg">
+            <SidebarMenuButton size="lg" asChild>
               <div className="flex w-full items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2.5">
                   <BosonLogo
-                    className="!size-7 text-primary"
+                    className="!size-5 text-primary"
                     spinToken={syncToken}
                   />
                   <div className="mt-0.5 flex flex-col gap-1 leading-none">
-                    <span className="text-base font-bold">Boson</span>
+                    <span className="text-sm font-semibold">Boson</span>
                   </div>
                 </div>
                 <Button
@@ -98,43 +163,33 @@ export function AppSidebar({
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
-              {!isLoading && routes.length > 0 && grouped.length === 0 && (
+              {!isLoading && routes.length > 0 && tree.length === 0 && (
                 <SidebarMenuItem>
                   <SidebarMenuButton>No matching routes.</SidebarMenuButton>
                 </SidebarMenuItem>
               )}
-              {grouped.map((group) => (
-                <SidebarMenuItem key={group.title}>
-                  <SidebarMenuButton asChild>
-                    <button type="button" className="font-medium">
-                      <span>{group.title}</span>
-                      <Badge variant="secondary">{group.items.length}</Badge>
-                    </button>
-                  </SidebarMenuButton>
-                  <SidebarMenuSub>
-                    {group.items.map((route) => (
-                      <SidebarMenuSubItem key={route.id}>
-                        <SidebarMenuSubButton
-                          asChild
-                          isActive={selectedRouteId === route.id}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => onSelectRoute(route.id)}
-                            className="w-full text-left"
-                          >
-                            <span>{route.name}</span>
-                          </button>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ))}
-                  </SidebarMenuSub>
-                </SidebarMenuItem>
+              {tree.map((node) => (
+                <TreeNodeView
+                  key={node.path}
+                  node={node}
+                  selectedRouteId={selectedRouteId}
+                  expandedPaths={expandedPaths}
+                  onTogglePath={togglePath}
+                  onSelectRoute={onSelectRoute}
+                  lastRunByRoute={lastRunByRoute}
+                />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter>
+        <div className="px-2 py-1">
+          <Badge variant="secondary" className="text-[10px]">
+            {activeEnvironment}
+          </Badge>
+        </div>
+      </SidebarFooter>
       <SidebarRail />
 
       <CommandDialog
@@ -151,9 +206,44 @@ export function AppSidebar({
           />
           <CommandList>
             <CommandEmpty>No matching routes.</CommandEmpty>
-            {grouped.map((group) => (
-              <CommandGroup key={group.title} heading={group.title}>
-                {group.items.map((route) => (
+            <CommandGroup heading="Filters">
+              <CommandItem onSelect={() => setFailedOnly((v) => !v)}>
+                <Funnel className="size-3.5" />
+                <span>Failed only</span>
+                <span className="ml-auto text-[10px] text-muted-foreground">
+                  {failedOnly ? "ON" : "OFF"}
+                </span>
+              </CommandItem>
+              {methodOptions.map((method) => (
+                <CommandItem
+                  key={`method-${method}`}
+                  onSelect={() =>
+                    setMethodFilter((v) => (v === method ? "all" : method))
+                  }
+                >
+                  <span>Method: {method}</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground">
+                    {methodFilter === method ? "ON" : "OFF"}
+                  </span>
+                </CommandItem>
+              ))}
+              {collectionOptions.map((group) => (
+                <CommandItem
+                  key={`group-${group}`}
+                  onSelect={() =>
+                    setGroupFilter((v) => (v === group ? "all" : group))
+                  }
+                >
+                  <span>Group: {group}</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground">
+                    {groupFilter === group ? "ON" : "OFF"}
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            {tree.map((branch) => (
+              <CommandGroup key={branch.path} heading={branch.label}>
+                {flattenLeafRoutes(branch).map((route) => (
                   <CommandItem
                     key={route.id}
                     value={`${route.name} ${route.path} ${route.method} ${route.id}`}
@@ -163,8 +253,10 @@ export function AppSidebar({
                     }}
                   >
                     <span className="truncate">{route.name}</span>
-                    <span className="ml-auto text-[10px] text-muted-foreground">
-                      {route.method}
+                    <span
+                      className={`ml-auto text-[10px] ${methodClass(route.method)}`}
+                    >
+                      {route.method.toUpperCase()}
                     </span>
                   </CommandItem>
                 ))}
@@ -175,29 +267,4 @@ export function AppSidebar({
       </CommandDialog>
     </Sidebar>
   )
-}
-
-function groupRoutes(routes: RouteDefinition[], search: string) {
-  const map = new Map<string, RouteDefinition[]>()
-  const query = search.trim().toLowerCase()
-
-  for (const route of routes) {
-    const searchable =
-      `${route.name} ${route.path} ${route.method} ${route.group ?? ""}`.toLowerCase()
-    if (query && !searchable.includes(query)) {
-      continue
-    }
-    const group = route.group?.trim() || "Ungrouped"
-    const bucket = map.get(group)
-    if (bucket) {
-      bucket.push(route)
-    } else {
-      map.set(group, [route])
-    }
-  }
-
-  return Array.from(map.entries()).map(([title, items]) => ({
-    title,
-    items,
-  }))
 }
