@@ -1,8 +1,17 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { Clock, Lightning } from "@phosphor-icons/react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
 import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import { AppSidebar } from "@/components/app-sidebar"
 import {
   SidebarInset,
@@ -11,6 +20,7 @@ import {
 } from "@/components/ui/sidebar"
 import {
   getEnvironments,
+  getEventsUrl,
   getRoutes,
   runRoute,
   type EnvironmentConfig,
@@ -27,46 +37,59 @@ export function App() {
   const [error, setError] = useState<string>("")
   const [result, setResult] = useState<RunResult | null>(null)
   const [syncToken, setSyncToken] = useState(0)
+  const [sseConnected, setSseConnected] = useState(false)
+
+  const loadWorkspace = useCallback(async () => {
+    setIsLoading(true)
+    setError("")
+    try {
+      const [routesData, envData] = await Promise.all([getRoutes(), getEnvironments()])
+      setRoutes(routesData)
+      setEnvironments(envData)
+      setSyncToken((value) => value + 1)
+      setSelectedRouteId((current) => {
+        if (current && routesData.some((route) => route.id === current)) {
+          return current
+        }
+        return routesData[0]?.id ?? ""
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load workspace")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    let mounted = true
-    const load = async () => {
-      setIsLoading(true)
-      setError("")
-      try {
-        const [routesData, envData] = await Promise.all([
-          getRoutes(),
-          getEnvironments(),
-        ])
-        if (!mounted) return
-        setRoutes(routesData)
-        setEnvironments(envData)
-        setSyncToken((value) => value + 1)
-        if (routesData.length > 0 && !selectedRouteId) {
-          setSelectedRouteId(routesData[0].id)
-        }
-      } catch (err) {
-        if (!mounted) return
-        setError(err instanceof Error ? err.message : "Failed to load workspace")
-      } finally {
-        if (mounted) setIsLoading(false)
-      }
-    }
+    void loadWorkspace()
+  }, [loadWorkspace])
 
-    load()
-    const timer = window.setInterval(load, 2500)
+  useEffect(() => {
+    const events = new EventSource(getEventsUrl())
+
+    events.onopen = () => setSseConnected(true)
+    events.onerror = () => setSseConnected(false)
+    events.addEventListener("workspace-updated", () => {
+      void loadWorkspace()
+    })
+
     return () => {
-      mounted = false
-      window.clearInterval(timer)
+      events.close()
     }
-  }, [selectedRouteId])
+  }, [loadWorkspace])
+
+  useEffect(() => {
+    if (sseConnected) return
+    const timer = window.setInterval(() => {
+      void loadWorkspace()
+    }, 3000)
+    return () => window.clearInterval(timer)
+  }, [sseConnected, loadWorkspace])
 
   const selectedRoute = useMemo(
     () => routes.find((r) => r.id === selectedRouteId) ?? routes[0],
     [routes, selectedRouteId]
   )
-
-  const activeEnvironment = environments[0]?.name ?? "n/a"
 
   const handleRun = async () => {
     if (!selectedRoute) return
@@ -88,7 +111,6 @@ export function App() {
         routes={routes}
         selectedRouteId={selectedRoute?.id}
         onSelectRoute={setSelectedRouteId}
-        activeEnvironment={activeEnvironment}
         isLoading={isLoading}
         syncToken={syncToken}
       />
@@ -99,9 +121,12 @@ export function App() {
           <div className="flex min-w-0 items-center gap-2">
             <p className="text-sm text-muted-foreground">Repo-native API workspace</p>
             {selectedRoute && <Badge variant="outline">{selectedRoute.method}</Badge>}
+            <Badge variant={sseConnected ? "default" : "secondary"}>
+              {sseConnected ? "Live" : "Polling"}
+            </Badge>
           </div>
         </header>
-        <section className="space-y-4 p-6">
+        <section className="mx-auto w-full max-w-6xl space-y-5 p-6">
         {error && (
           <Card className="border-destructive/40">
             <CardContent className="pt-6 text-sm text-destructive">
@@ -112,28 +137,21 @@ export function App() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Request Preview</CardTitle>
+            <CardTitle className="text-base">Request Preview</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm">
+          <CardContent className="space-y-4 pb-6 text-base">
             {!selectedRoute && (
               <p className="text-muted-foreground">Select a route to continue.</p>
             )}
             {selectedRoute && (
               <>
-                <p>
-                  <span className="font-medium">ID:</span> {selectedRoute.id}
-                </p>
-                <p>
-                  <span className="font-medium">Name:</span> {selectedRoute.name}
-                </p>
-                <p>
-                  <span className="font-medium">Method:</span>{" "}
-                  {selectedRoute.method}
-                </p>
-                <p>
-                  <span className="font-medium">Path:</span> {selectedRoute.path}
-                </p>
-                <Button onClick={handleRun} disabled={isRunning}>
+                <div className="grid gap-3 rounded-md border bg-muted/20 p-4 md:grid-cols-2">
+                  <MetaRow label="ID" value={selectedRoute.id} />
+                  <MetaRow label="Name" value={selectedRoute.name} />
+                  <MetaRow label="Method" value={selectedRoute.method} />
+                  <MetaRow label="Path" value={selectedRoute.path} />
+                </div>
+                <Button size="default" className="min-w-36 font-medium" onClick={handleRun} disabled={isRunning}>
                   {isRunning ? "Running..." : "Run Request"}
                 </Button>
               </>
@@ -143,23 +161,43 @@ export function App() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Response</CardTitle>
+            <CardTitle className="text-base">Response</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            {!result && (
-              <p className="text-muted-foreground">No request executed yet.</p>
+          <CardContent className="space-y-4 pb-6 text-sm">
+            {!result && !isRunning && (
+              <Empty className="border-muted/50 bg-muted/10">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Lightning className="size-4" />
+                  </EmptyMedia>
+                  <EmptyTitle>No response yet</EmptyTitle>
+                  <EmptyDescription>
+                    Run the selected route to inspect response status, payload, and test results.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            )}
+            {isRunning && (
+              <div className="space-y-3">
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-36 w-full" />
+              </div>
             )}
             {result && (
               <>
-                <p>
-                  <span className="font-medium">Status:</span> {result.status}
-                </p>
-                <p>
-                  <span className="font-medium">Time:</span> {result.elapsed_ms} ms
-                </p>
+                <div className="flex items-center gap-3 text-sm">
+                  <Badge variant={result.status < 400 ? "default" : "destructive"}>
+                    Status {result.status}
+                  </Badge>
+                  <div className="flex items-center gap-1 text-muted-foreground">
+                    <Clock className="size-3.5" />
+                    <span>{result.elapsed_ms} ms</span>
+                  </div>
+                </div>
                 <div>
                   <p className="mb-1 font-medium">Body</p>
-                  <pre className="max-h-72 overflow-auto rounded-md border bg-muted p-3 text-xs">
+                  <pre className="max-h-80 overflow-auto rounded-md border bg-muted p-3 text-xs leading-relaxed">
                     {JSON.stringify(result.response_body ?? {}, null, 2)}
                   </pre>
                 </div>
@@ -184,3 +222,14 @@ export function App() {
 }
 
 export default App
+
+function MetaRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      <p className="font-medium text-foreground">{value}</p>
+    </div>
+  )
+}

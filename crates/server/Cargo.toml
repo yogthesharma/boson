@@ -7,9 +7,11 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 axum.workspace = true
+notify.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 tokio.workspace = true
+tokio-stream.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
 boson-core = { path = "../core" }

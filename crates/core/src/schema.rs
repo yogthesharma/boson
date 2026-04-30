@@ -22,6 +22,8 @@ pub struct RouteDefinition {
     pub name: String,
     pub method: String,
     pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
     #[serde(default)]
     pub group: Option<String>,
     #[serde(default)]

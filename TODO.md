@@ -19,18 +19,25 @@
 - [ ] `boson test` for suite execution
 
 ## 3) Local Server
-- [ ] Implement `GET /health`
-- [ ] Implement `GET /routes`
-- [ ] Implement `GET /environments`
-- [ ] Implement `POST /run/:route_id`
-- [ ] Add file watch + live refresh events
+- [x] Implement `GET /health`
+- [x] Implement `GET /routes`
+- [x] Implement `GET /environments`
+- [x] Implement `POST /run/:route_id`
+- [x] Add file watch + live refresh events
+- [x] Add `GET /api/events` SSE stream for UI live sync
 
 ## 4) UI (Read-Only + Actionable)
-- [ ] Route list with groups/tags
-- [ ] Request preview panel
-- [ ] Run action + response viewer
+- [x] Route list with groups/tags
+- [x] Request preview panel
+- [x] Run action + response viewer
+- [x] Add route search in sidebar
+- [x] Replace sidebar text search with command palette trigger
+- [x] Improve sidebar brand anchor (logo scale + title weight)
+- [x] Convert request details to 2-column definition layout
+- [x] Add response empty/skeleton states for clearer UX
 - [ ] Environment switcher
 - [ ] Last run history panel
+- [x] Switch from fixed polling to SSE-driven live refresh (with polling fallback)
 
 ## 5) Quality
 - [ ] Add unit tests in `core` for parsing/validation/interpolation

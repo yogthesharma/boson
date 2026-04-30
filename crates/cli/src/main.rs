@@ -23,7 +23,7 @@ enum Commands {
     Dev {
         #[arg(long, default_value = "127.0.0.1:8787")]
         addr: SocketAddr,
-        #[arg(long, default_value = "http://localhost:3000")]
+        #[arg(long, default_value = "http://127.0.0.1:8787")]
         base_url: String,
         #[arg(long, default_value = "http://localhost:5173")]
         ui_url: String,
@@ -95,7 +95,7 @@ fn init_workspace(root_dir: &PathBuf) -> Result<()> {
         r#"{
   "name": "local",
   "variables": {
-    "base_url": "http://localhost:3000"
+    "base_url": "http://127.0.0.1:8787"
   }
 }
 "#,

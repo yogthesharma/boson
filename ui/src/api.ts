@@ -3,6 +3,7 @@ export type RouteDefinition = {
   name: string
   method: string
   path: string
+  source_path?: string
   group?: string
 }
 
@@ -42,4 +43,8 @@ export function runRoute(routeId: string): Promise<RunResult> {
   return readJson<RunResult>(`${API_BASE}/api/run/${routeId}`, {
     method: "POST",
   })
+}
+
+export function getEventsUrl(): string {
+  return `${API_BASE}/api/events`
 }
