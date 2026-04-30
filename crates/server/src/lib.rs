@@ -2,7 +2,7 @@ use anyhow::Result;
 use axum::{
     body::Bytes,
     extract::{Path, State},
-    http::Method,
+    http::{HeaderMap, HeaderValue, Method, StatusCode},
     response::{
         sse::{Event, KeepAlive, Sse},
         IntoResponse,
@@ -51,6 +51,7 @@ pub async fn run_local_server(root_dir: PathBuf, base_url: String, addr: SocketA
         .route("/api/events", get(events_handler))
         .route("/demo/rest/resource", any(rest_resource_handler))
         .route("/demo/rest/search", get(rest_search_handler))
+        .route("/demo/rest/headers", get(rest_headers_handler))
         .with_state(state)
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http());
@@ -186,6 +187,33 @@ async fn rest_search_handler() -> impl IntoResponse {
         "hint": "Add query params to this endpoint from route definitions.",
         "example": "/demo/rest/search?limit=10&cursor=abc"
     }))
+}
+
+async fn rest_headers_handler() -> impl IntoResponse {
+    let mut headers = HeaderMap::new();
+    headers.insert("x-boson-demo", HeaderValue::from_static("headers-tab"));
+    headers.insert("x-boson-version", HeaderValue::from_static("local-mvp"));
+    headers.insert(
+        "cache-control",
+        HeaderValue::from_static("public, max-age=120"),
+    );
+    headers.append(
+        "set-cookie",
+        HeaderValue::from_static("boson_session=abc123; Path=/; HttpOnly"),
+    );
+    headers.append(
+        "set-cookie",
+        HeaderValue::from_static("boson_flags=beta,headers; Path=/"),
+    );
+
+    (
+        StatusCode::OK,
+        headers,
+        Json(serde_json::json!({
+            "message": "Demo endpoint with custom headers",
+            "purpose": "Validate headers tab rendering in Boson UI"
+        })),
+    )
 }
 
 fn read_snapshot(state: &AppState) -> Result<WorkspaceSnapshot> {

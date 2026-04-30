@@ -1,6 +1,11 @@
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { Card, CardContent } from "@/components/ui/card"
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable"
 import { MainHeader } from "@/app/main-header"
 import { RequestPreviewCard } from "@/app/request-preview-card"
 import { ResponseCard } from "@/app/response-card"
@@ -19,6 +24,8 @@ export function App() {
     lastRunByRoute,
     syncToken,
     sseConnected,
+    timeline,
+    clearTimeline,
     runSelectedRoute,
   } = useWorkspace()
 
@@ -46,20 +53,36 @@ export function App() {
           activeEnvironment={activeEnvironment}
           sseConnected={sseConnected}
         />
-        <section className="mx-auto w-full max-w-6xl space-y-5 p-6">
+        <section className="h-[calc(99vh-var(--header-height))]">
           {error && (
-            <Card className="border-destructive/40">
-              <CardContent className="pt-6 text-sm text-destructive">
+            <Card className="mb-3 border-destructive/40">
+              <CardContent className="pt-4 text-sm text-destructive">
                 {error}
               </CardContent>
             </Card>
           )}
-          <RequestPreviewCard
-            selectedRoute={selectedRoute}
-            isRunning={isRunning}
-            onRun={() => void runSelectedRoute()}
-          />
-          <ResponseCard result={result} isRunning={isRunning} />
+
+          <div className="h-full overflow-hidden rounded-md bg-background">
+            <ResizablePanelGroup orientation="vertical">
+              <ResizablePanel defaultSize={54} minSize={25}>
+                <RequestPreviewCard
+                  selectedRoute={selectedRoute}
+                  isRunning={isRunning}
+                  onRun={() => void runSelectedRoute()}
+                />
+              </ResizablePanel>
+              <ResizableHandle withHandle />
+              <ResizablePanel defaultSize={46} minSize={25}>
+                <ResponseCard
+                  result={result}
+                  isRunning={isRunning}
+                  selectedRoute={selectedRoute}
+                  timeline={timeline}
+                  onClearTimeline={clearTimeline}
+                />
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </div>
         </section>
       </SidebarInset>
     </SidebarProvider>

@@ -5,6 +5,16 @@ export type RouteDefinition = {
   path: string
   source_path?: string
   group?: string
+  headers: Record<string, string>
+  body?: unknown
+  tests: Array<
+    | { type: "status"; equals: number }
+    | { type: "header_exists"; key: string }
+    | { type: "header_equals"; key: string; equals: string }
+    | { type: "body_path_exists"; path: string }
+    | { type: "body_path_equals"; path: string; equals: unknown }
+    | { type: "response_time_ms"; less_than: number }
+  >
 }
 
 export type EnvironmentConfig = {
@@ -16,6 +26,7 @@ export type RunResult = {
   route_id: string
   status: number
   elapsed_ms: number
+  response_headers: Record<string, string>
   response_body?: unknown
   test_results: Array<{ passed: boolean; message: string }>
 }

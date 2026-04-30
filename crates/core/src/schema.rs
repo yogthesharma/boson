@@ -38,6 +38,11 @@ pub struct RouteDefinition {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RouteTest {
     Status { equals: u16 },
+    HeaderExists { key: String },
+    HeaderEquals { key: String, equals: String },
+    BodyPathExists { path: String },
+    BodyPathEquals { path: String, equals: Value },
+    ResponseTimeMs { less_than: u64 },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
