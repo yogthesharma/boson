@@ -14,6 +14,7 @@ export function JsonCodeView({ content }: JsonCodeViewProps) {
   const { theme } = useTheme()
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const matchesRef = useRef<Monaco.editor.FindMatch[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [matches, setMatches] = useState<Monaco.editor.FindMatch[]>([])
@@ -38,16 +39,19 @@ export function JsonCodeView({ content }: JsonCodeViewProps) {
   }, [theme])
 
   const revealMatch = useCallback(
-    (index: number, nextMatches: Monaco.editor.FindMatch[] = matches) => {
+    (index: number, nextMatches?: Monaco.editor.FindMatch[]) => {
       const editor = editorRef.current
-      if (!editor || nextMatches.length === 0) return
-      const safeIndex = ((index % nextMatches.length) + nextMatches.length) % nextMatches.length
-      const range = nextMatches[safeIndex].range
+      const resolvedMatches = nextMatches ?? matchesRef.current
+      if (!editor || resolvedMatches.length === 0) return
+      const safeIndex =
+        ((index % resolvedMatches.length) + resolvedMatches.length) %
+        resolvedMatches.length
+      const range = resolvedMatches[safeIndex].range
       editor.setSelection(range)
       editor.revealLineInCenter(range.startLineNumber)
       setActiveMatch(safeIndex + 1)
     },
-    [matches],
+    [],
   )
 
   const runSearch = useCallback(
@@ -55,11 +59,13 @@ export function JsonCodeView({ content }: JsonCodeViewProps) {
       const editor = editorRef.current
       const model = editor?.getModel()
       if (!editor || !model || !query.trim()) {
+        matchesRef.current = []
         setMatches([])
         setActiveMatch(0)
         return
       }
       const found = model.findMatches(query, true, false, false, null, true)
+      matchesRef.current = found
       setMatches(found)
       if (found.length > 0) {
         revealMatch(0, found)

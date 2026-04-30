@@ -13,12 +13,16 @@ type ResponseToolbarProps = {
 
 export function ResponseToolbar(props: ResponseToolbarProps) {
   const { result, responseSize, onCopy, onDownload } = props
-  const passedTests = result?.test_results.filter((test) => test.passed).length ?? 0
+  const passedTests =
+    result?.test_results.filter((test) => test.passed).length ?? 0
   const totalTests = result?.test_results.length ?? 0
 
   return (
-    <div className="flex items-center justify-between gap-3 pb-2">
-      <TabsList variant="line" className="h-auto w-auto border-none p-0">
+    <div className="flex items-center justify-between gap-3 px-1 pt-4 pb-2">
+      <TabsList
+        variant="line"
+        className="h-auto w-fit justify-start border-none p-0"
+      >
         <TabsTrigger value="response">Response</TabsTrigger>
         <TabsTrigger value="headers">Headers</TabsTrigger>
         <TabsTrigger value="timeline">Timeline</TabsTrigger>

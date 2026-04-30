@@ -19,7 +19,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -182,13 +181,6 @@ export function AppSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
-        <div className="px-2 py-1">
-          <Badge variant="secondary" className="text-[10px]">
-            {activeEnvironment}
-          </Badge>
-        </div>
-      </SidebarFooter>
       <SidebarRail />
 
       <CommandDialog

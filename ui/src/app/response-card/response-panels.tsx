@@ -43,7 +43,7 @@ export function ResponsePanels(props: ResponsePanelsProps) {
     const query = headerFilter.trim().toLowerCase()
     if (!query) return headerEntries
     return headerEntries.filter(([name, value]) =>
-      `${name} ${value}`.toLowerCase().includes(query),
+      `${name} ${value}`.toLowerCase().includes(query)
     )
   }, [headerEntries, headerFilter])
   const formatRelativeTime = (timestamp: number) => {
@@ -90,8 +90,8 @@ export function ResponsePanels(props: ResponsePanelsProps) {
       </TabsContent>
 
       <TabsContent value="headers" className="flex min-h-0 flex-1">
-        <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-md border">
-          <div className="grid grid-cols-2 border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+          <div className="grid grid-cols-2 border-b border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
             <div className="flex items-center gap-2">
               <span>Header</span>
               <Input
@@ -139,16 +139,18 @@ export function ResponsePanels(props: ResponsePanelsProps) {
                 No response headers were returned.
               </div>
             )}
-            {result && headerEntries.length > 0 && filteredHeaderEntries.length === 0 && (
-              <div className="px-3 py-3 text-sm text-muted-foreground">
-                No headers match the current filter.
-              </div>
-            )}
+            {result &&
+              headerEntries.length > 0 &&
+              filteredHeaderEntries.length === 0 && (
+                <div className="px-3 py-3 text-sm text-muted-foreground">
+                  No headers match the current filter.
+                </div>
+              )}
             {result &&
               filteredHeaderEntries.map(([name, value]) => (
                 <div
                   key={name}
-                  className="grid grid-cols-2 border-b border-border/60 px-3 py-2 text-sm last:border-b-0"
+                  className="grid grid-cols-2 border-b border-border/60 px-3 py-2 text-sm last:border-b"
                 >
                   <span className="font-medium break-all text-foreground/90">
                     {name}
@@ -161,8 +163,8 @@ export function ResponsePanels(props: ResponsePanelsProps) {
       </TabsContent>
 
       <TabsContent value="timeline" className="flex min-h-0 flex-1">
-        <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-md border">
-          <div className="grid grid-cols-2 border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+          <div className="grid grid-cols-2 border-b border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
             <span>Event</span>
             <div className="flex items-center justify-between">
               <span>Time</span>
@@ -187,7 +189,7 @@ export function ResponsePanels(props: ResponsePanelsProps) {
             {timeline.map((item) => (
               <div
                 key={item.id}
-                className="grid grid-cols-2 gap-3 border-b border-border/60 px-3 py-2 text-sm last:border-b-0"
+                className="grid grid-cols-2 gap-3 border-b border-border/60 px-3 py-2 text-sm last:border-b"
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -224,8 +226,8 @@ export function ResponsePanels(props: ResponsePanelsProps) {
       </TabsContent>
 
       <TabsContent value="tests" className="flex min-h-0 flex-1">
-        <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-md border">
-          <div className="grid grid-cols-2 border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+          <div className="grid grid-cols-2 border-b border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
             <span>Assertion</span>
             <span>Result</span>
           </div>
@@ -251,7 +253,7 @@ export function ResponsePanels(props: ResponsePanelsProps) {
               result.test_results.map((test, index) => (
                 <div
                   key={`${index}-${test.message}`}
-                  className="grid grid-cols-2 gap-3 border-b border-border/60 px-3 py-2 text-sm last:border-b-0"
+                  className="grid grid-cols-2 gap-3 border-b border-border/60 px-3 py-2 text-sm last:border-b"
                 >
                   <span className="break-words text-foreground/90">
                     {test.message}
