@@ -21,6 +21,7 @@ import { ScriptPanel } from "@/app/request-card/script-panel"
 import { SettingsPanel } from "@/app/request-card/settings-panel"
 import { TestsPanel } from "@/app/request-card/tests-panel"
 import { VarsPanel } from "@/app/request-card/vars-panel"
+import { computeMissingEnvironmentVariables } from "@/app/request-card/missing-vars"
 import { useEffect, useMemo, useState } from "react"
 import {
   Table,
@@ -230,40 +231,7 @@ export function RequestPreviewCard(props: RequestPreviewCardProps) {
   }, [currentState, defaultState])
 
   const missingVariables = useMemo(() => {
-    if (!currentState) return []
-    const tokenPattern = /\{\{([^}]+)\}\}/g
-    const known = new Set(Object.keys(activeEnvironmentVariables))
-    const required = new Set<string>()
-    const collect = (source: string) => {
-      let match = tokenPattern.exec(source)
-      while (match) {
-        const key = match[1]?.trim()
-        if (key) required.add(key)
-        match = tokenPattern.exec(source)
-      }
-      tokenPattern.lastIndex = 0
-    }
-    collect(currentState.url)
-    for (const [key, value] of currentState.headers) {
-      collect(key)
-      collect(value)
-    }
-    collect(currentState.bodyText)
-    for (const [key, value] of currentState.bodyFormEntries) {
-      collect(key)
-      collect(value)
-    }
-    for (const item of currentState.bodyMultipartEntries) {
-      collect(item.key)
-      collect(item.value ?? "")
-      collect(item.fileName ?? "")
-    }
-    collect(currentState.bodyBinaryPath)
-    for (const item of currentState.vars) {
-      collect(item.key)
-      collect(item.value)
-    }
-    return Array.from(required).filter((key) => !known.has(key)).sort()
+    return computeMissingEnvironmentVariables(currentState, activeEnvironmentVariables)
   }, [activeEnvironmentVariables, currentState])
 
   return (

@@ -592,3 +592,230 @@ fn is_relevant_fs_event(kind: &EventKind) -> bool {
     )
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{extract::Path as AxumPath, http::HeaderMap as AxumHeaderMap, routing::post, Json};
+    use serde_json::json;
+    use std::fs;
+    use tempfile::tempdir;
+    use tokio::{net::TcpListener, task::JoinHandle};
+
+    async fn start_echo_server() -> (String, JoinHandle<()>) {
+        async fn echo_handler(
+            AxumPath(tenant): AxumPath<String>,
+            headers: AxumHeaderMap,
+            Json(body): Json<Value>,
+        ) -> Json<Value> {
+            let x_tenant = headers
+                .get("x-tenant")
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or_default()
+                .to_string();
+            let auth = headers
+                .get("authorization")
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or_default()
+                .to_string();
+            Json(json!({
+                "tenant_path": tenant,
+                "x_tenant": x_tenant,
+                "authorization": auth,
+                "body": body
+            }))
+        }
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind echo");
+        let addr = listener.local_addr().expect("echo addr");
+        let app = Router::new().route("/echo/:tenant", post(echo_handler));
+        let handle = tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        (format!("http://{}", addr), handle)
+    }
+
+    fn write_json_file(path: &std::path::Path, value: Value) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create parent");
+        }
+        let content = serde_json::to_string_pretty(&value).expect("json");
+        fs::write(path, format!("{}\n", content)).expect("write");
+    }
+
+    async fn wait_for_health(base_url: &str) {
+        let client = reqwest::Client::new();
+        for _ in 0..50 {
+            if let Ok(response) = client.get(format!("{}/health", base_url)).send().await {
+                if response.status().is_success() {
+                    return;
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        panic!("server did not become healthy in time");
+    }
+
+    #[tokio::test]
+    async fn environment_switching_resolves_payload_and_history_env_label() {
+        let workspace = tempdir().expect("tempdir");
+        let root = workspace.path();
+        let (target_base_url, target_handle) = start_echo_server().await;
+
+        write_json_file(
+            &root.join(".api/project.json"),
+            json!({
+              "schema_version": "1",
+              "name": "Boson Test",
+              "default_environment": "env-a"
+            }),
+        );
+        write_json_file(
+            &root.join(".api/environments/env-a.json"),
+            json!({
+              "name": "env-a",
+              "variables": {
+                "base_url": target_base_url,
+                "tenant": "alpha",
+                "token": "token-a"
+              }
+            }),
+        );
+        write_json_file(
+            &root.join(".api/environments/env-b.json"),
+            json!({
+              "name": "env-b",
+              "variables": {
+                "base_url": target_base_url,
+                "tenant": "beta",
+                "token": "token-b"
+              }
+            }),
+        );
+        write_json_file(
+            &root.join(".api/routes/env-check.json"),
+            json!({
+              "id": "env-check",
+              "name": "Environment Check",
+              "method": "POST",
+              "path": "/echo/{{tenant}}",
+              "headers": {
+                "x-tenant": "{{tenant}}",
+                "authorization": "Bearer {{token}}",
+                "content-type": "application/json"
+              },
+              "body": {
+                "tenant": "{{tenant}}",
+                "token": "{{token}}"
+              },
+              "tests": []
+            }),
+        );
+
+        let server_listener = TcpListener::bind("127.0.0.1:0").await.expect("bind server");
+        let server_addr = server_listener.local_addr().expect("server addr");
+        drop(server_listener);
+
+        let server_handle = tokio::spawn(run_local_server(
+            root.to_path_buf(),
+            "http://127.0.0.1:8787".to_string(),
+            server_addr,
+        ));
+        let server_base_url = format!("http://{}", server_addr);
+        wait_for_health(&server_base_url).await;
+        let client = reqwest::Client::new();
+
+        let run_a: Value = client
+            .post(format!("{}/api/run/env-check?environment=env-a", server_base_url))
+            .send()
+            .await
+            .expect("run env a")
+            .error_for_status()
+            .expect("status env a")
+            .json()
+            .await
+            .expect("json env a");
+
+        let run_b: Value = client
+            .post(format!("{}/api/run/env-check?environment=env-b", server_base_url))
+            .send()
+            .await
+            .expect("run env b")
+            .error_for_status()
+            .expect("status env b")
+            .json()
+            .await
+            .expect("json env b");
+
+        assert_eq!(
+            run_a
+                .get("response_body")
+                .and_then(|value| value.get("tenant_path"))
+                .and_then(Value::as_str),
+            Some("alpha")
+        );
+        assert_eq!(
+            run_a
+                .get("response_body")
+                .and_then(|value| value.get("x_tenant"))
+                .and_then(Value::as_str),
+            Some("alpha")
+        );
+        assert_eq!(
+            run_a
+                .get("response_body")
+                .and_then(|value| value.get("body"))
+                .and_then(|value| value.get("token"))
+                .and_then(Value::as_str),
+            Some("token-a")
+        );
+
+        assert_eq!(
+            run_b
+                .get("response_body")
+                .and_then(|value| value.get("tenant_path"))
+                .and_then(Value::as_str),
+            Some("beta")
+        );
+        assert_eq!(
+            run_b
+                .get("response_body")
+                .and_then(|value| value.get("x_tenant"))
+                .and_then(Value::as_str),
+            Some("beta")
+        );
+        assert_eq!(
+            run_b
+                .get("response_body")
+                .and_then(|value| value.get("body"))
+                .and_then(|value| value.get("token"))
+                .and_then(Value::as_str),
+            Some("token-b")
+        );
+
+        let history: Vec<Value> = client
+            .get(format!("{}/api/runs", server_base_url))
+            .send()
+            .await
+            .expect("list runs")
+            .error_for_status()
+            .expect("status runs")
+            .json()
+            .await
+            .expect("runs json");
+        let mut envs = history
+            .iter()
+            .map(|item| {
+                item.get("environment_name")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        envs.sort();
+        assert_eq!(envs, vec!["env-a".to_string(), "env-b".to_string()]);
+
+        server_handle.abort();
+        target_handle.abort();
+    }
+}
+
