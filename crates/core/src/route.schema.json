@@ -18,6 +18,52 @@
       "additionalProperties": { "type": "string" }
     },
     "body": {},
+    "body_config": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "json",
+            "xml",
+            "text",
+            "sparql",
+            "form_urlencoded",
+            "multipart_form",
+            "binary"
+          ]
+        },
+        "raw": { "type": "string" },
+        "form_entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["key"],
+            "properties": {
+              "key": { "type": "string" },
+              "value": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "multipart_entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["key"],
+            "properties": {
+              "key": { "type": "string" },
+              "value": { "type": "string" },
+              "type": { "type": "string", "enum": ["text", "file"] }
+            },
+            "additionalProperties": false
+          }
+        },
+        "binary_path": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
     "tests": {
       "type": "array",
       "items": {

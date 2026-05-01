@@ -218,6 +218,7 @@ name = "boson-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64",
  "jsonschema",
  "reqwest",
  "serde",
@@ -1371,6 +1372,7 @@ dependencies = [
  "hyper-util",
  "js-sys",
  "log",
+ "mime_guess",
  "percent-encoding",
  "pin-project-lite",
  "quinn",

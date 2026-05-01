@@ -1,9 +1,10 @@
 use crate::schema::{EnvironmentConfig, RouteDefinition, RouteTest};
 use anyhow::Result;
+use base64::Engine;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::BTreeMap, time::Instant};
+use std::{collections::BTreeMap, fs, path::Path, time::Instant};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunResult {
@@ -40,7 +41,25 @@ pub async fn run_route(
         request = request.header(k, v);
     }
 
-    if let Some(body) = &route.body {
+    if let Some(override_body) = resolve_special_body_from_override(route)? {
+        match override_body {
+            ResolvedSpecialBody::Binary { bytes } => {
+                request = request.body(bytes);
+            }
+            ResolvedSpecialBody::Multipart { form } => {
+                request = request.multipart(form);
+            }
+        }
+    } else if let Some(config_file_body) = resolve_special_body_from_file_config(route)? {
+        match config_file_body {
+            ResolvedSpecialBody::Binary { bytes } => {
+                request = request.body(bytes);
+            }
+            ResolvedSpecialBody::Multipart { form } => {
+                request = request.multipart(form);
+            }
+        }
+    } else if let Some(body) = &route.body {
         let content_type = route
             .headers
             .iter()
@@ -260,4 +279,257 @@ fn json_path_get<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
 enum PathToken {
     Key(String),
     Index(usize),
+}
+
+enum ResolvedSpecialBody {
+    Binary { bytes: Vec<u8> },
+    Multipart { form: reqwest::multipart::Form },
+}
+
+fn resolve_special_body_from_override(route: &RouteDefinition) -> Result<Option<ResolvedSpecialBody>> {
+    let Some(body) = route.body.as_ref() else {
+        return Ok(None);
+    };
+    let Some(envelope) = body.get("__boson_body") else {
+        return Ok(None);
+    };
+    let Some(mode) = envelope.get("mode").and_then(Value::as_str) else {
+        return Ok(None);
+    };
+
+    if mode == "binary" {
+        let file_base64 = envelope.get("file_base64").and_then(Value::as_str).unwrap_or_default();
+        if !file_base64.trim().is_empty() {
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(file_base64)
+                .map_err(|err| anyhow::anyhow!("invalid binary file_base64 payload: {}", err))?;
+            return Ok(Some(ResolvedSpecialBody::Binary { bytes }));
+        }
+        let path = envelope.get("path").and_then(Value::as_str).unwrap_or_default();
+        if !path.trim().is_empty() {
+            let bytes = fs::read(path)
+                .map_err(|err| anyhow::anyhow!("failed to read binary body file `{}`: {}", path, err))?;
+            return Ok(Some(ResolvedSpecialBody::Binary { bytes }));
+        }
+        return Ok(None);
+    }
+
+    if mode == "multipart_form" {
+        let mut form = reqwest::multipart::Form::new();
+        let entries = envelope
+            .get("entries")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        if entries.is_empty() {
+            return Ok(None);
+        }
+        for entry in entries {
+            let key = entry.get("key").and_then(Value::as_str).unwrap_or_default().to_string();
+            if key.trim().is_empty() {
+                continue;
+            }
+            let entry_type = entry.get("type").and_then(Value::as_str).unwrap_or("text");
+            if entry_type == "file" {
+                let file_base64 = entry
+                    .get("file_base64")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                let file_name = entry
+                    .get("file_name")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or("upload.bin")
+                    .to_string();
+                if !file_base64.trim().is_empty() {
+                    let bytes = base64::engine::general_purpose::STANDARD
+                        .decode(file_base64)
+                        .map_err(|err| anyhow::anyhow!("invalid multipart file_base64 payload: {}", err))?;
+                    let part = reqwest::multipart::Part::bytes(bytes).file_name(file_name);
+                    form = form.part(key, part);
+                } else {
+                    let file_path = entry
+                        .get("value")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string();
+                    if file_path.trim().is_empty() {
+                        continue;
+                    }
+                    let bytes = fs::read(&file_path).map_err(|err| {
+                        anyhow::anyhow!(
+                            "failed to read multipart file `{}` for key `{}`: {}",
+                            file_path,
+                            key,
+                            err
+                        )
+                    })?;
+                    let inferred_name = Path::new(&file_path)
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or("upload.bin")
+                        .to_string();
+                    let part =
+                        reqwest::multipart::Part::bytes(bytes).file_name(if file_name == "upload.bin" {
+                            inferred_name
+                        } else {
+                            file_name
+                        });
+                    form = form.part(key, part);
+                }
+            } else {
+                let value = entry
+                    .get("value")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                form = form.text(key, value);
+            }
+        }
+        return Ok(Some(ResolvedSpecialBody::Multipart { form }));
+    }
+
+    Ok(None)
+}
+
+fn resolve_special_body_from_file_config(
+    route: &RouteDefinition,
+) -> Result<Option<ResolvedSpecialBody>> {
+    let Some(file) = route.file.as_ref() else {
+        return Ok(None);
+    };
+    match file.mode.as_deref() {
+        Some("binary") => {
+            let Some(path) = file.path.as_deref().filter(|value| !value.trim().is_empty()) else {
+                return Ok(None);
+            };
+            let bytes = fs::read(path)
+                .map_err(|err| anyhow::anyhow!("failed to read binary file `{}`: {}", path, err))?;
+            Ok(Some(ResolvedSpecialBody::Binary { bytes }))
+        }
+        Some("multipart") => {
+            if file.multipart.is_empty() {
+                return Ok(None);
+            }
+            let mut form = reqwest::multipart::Form::new();
+            for field in &file.multipart {
+                if field.key.trim().is_empty() {
+                    continue;
+                }
+                if field.r#type.as_deref() == Some("file") {
+                    let path = field.value.as_deref().unwrap_or_default();
+                    if path.trim().is_empty() {
+                        continue;
+                    }
+                    let bytes = fs::read(path).map_err(|err| {
+                        anyhow::anyhow!(
+                            "failed to read multipart config file `{}` for key `{}`: {}",
+                            path,
+                            field.key,
+                            err
+                        )
+                    })?;
+                    let filename = Path::new(path)
+                        .file_name()
+                        .and_then(|value| value.to_str())
+                        .unwrap_or("upload.bin")
+                        .to_string();
+                    let part = reqwest::multipart::Part::bytes(bytes).file_name(filename);
+                    form = form.part(field.key.clone(), part);
+                } else {
+                    form = form.text(field.key.clone(), field.value.clone().unwrap_or_default());
+                }
+            }
+            Ok(Some(ResolvedSpecialBody::Multipart { form }))
+        }
+        _ => Ok(None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::schema::{RouteFileConfig, RouteMultipartField};
+
+    fn base_route() -> RouteDefinition {
+        RouteDefinition {
+            id: "id".to_string(),
+            name: "name".to_string(),
+            method: "POST".to_string(),
+            path: "/path".to_string(),
+            source_path: None,
+            group: None,
+            headers: BTreeMap::new(),
+            body: None,
+            body_config: None,
+            tests: Vec::new(),
+            auth: None,
+            vars: Vec::new(),
+            script: None,
+            docs: None,
+            file: None,
+            settings: None,
+        }
+    }
+
+    #[test]
+    fn parses_binary_override_base64() {
+        let mut route = base_route();
+        route.body = Some(serde_json::json!({
+            "__boson_body": {
+                "mode": "binary",
+                "file_base64": "aGVsbG8="
+            }
+        }));
+        let resolved = resolve_special_body_from_override(&route).expect("parse");
+        match resolved {
+            Some(ResolvedSpecialBody::Binary { bytes }) => assert_eq!(bytes, b"hello".to_vec()),
+            _ => panic!("expected binary body"),
+        }
+    }
+
+    #[test]
+    fn ignores_non_special_override_body() {
+        let mut route = base_route();
+        route.body = Some(serde_json::json!({"name":"demo"}));
+        let resolved = resolve_special_body_from_override(&route).expect("parse");
+        assert!(resolved.is_none());
+    }
+
+    #[test]
+    fn reads_binary_from_file_config_path() {
+        let temp_path = std::env::temp_dir().join("boson_binary_test_payload.bin");
+        fs::write(&temp_path, b"payload-bytes").expect("write temp file");
+        let mut route = base_route();
+        route.file = Some(RouteFileConfig {
+            mode: Some("binary".to_string()),
+            path: Some(temp_path.to_string_lossy().to_string()),
+            multipart: Vec::new(),
+        });
+        let resolved = resolve_special_body_from_file_config(&route).expect("resolve");
+        fs::remove_file(&temp_path).ok();
+        match resolved {
+            Some(ResolvedSpecialBody::Binary { bytes }) => {
+                assert_eq!(bytes, b"payload-bytes".to_vec())
+            }
+            _ => panic!("expected binary body"),
+        }
+    }
+
+    #[test]
+    fn builds_multipart_from_file_config() {
+        let mut route = base_route();
+        route.file = Some(RouteFileConfig {
+            mode: Some("multipart".to_string()),
+            path: None,
+            multipart: vec![RouteMultipartField {
+                key: "title".to_string(),
+                value: Some("sample".to_string()),
+                r#type: Some("text".to_string()),
+            }],
+        });
+        let resolved = resolve_special_body_from_file_config(&route).expect("resolve");
+        assert!(matches!(resolved, Some(ResolvedSpecialBody::Multipart { .. })));
+    }
 }

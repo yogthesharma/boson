@@ -28,11 +28,14 @@ type BodyPanelProps = {
   bodyFormEntries: Array<[string, string]>
   bodyMultipartEntries: MultipartField[]
   bodyBinaryPath: string
+  bodyBinaryFileName: string
   onBodyModeChange: (mode: RequestBodyMode) => void
   onBodyChange: (value: string) => void
   onBodyFormEntriesChange: (entries: Array<[string, string]>) => void
   onBodyMultipartEntriesChange: (entries: MultipartField[]) => void
   onBodyBinaryPathChange: (path: string) => void
+  onBodyBinaryFileSelect: (payload: { fileName: string; fileBase64: string }) => void
+  onBodyBinaryClear: () => void
 }
 
 const BODY_MODE_OPTIONS: Array<{ value: RequestBodyMode; label: string }> = [
@@ -71,11 +74,14 @@ export function BodyPanel({
   bodyFormEntries,
   bodyMultipartEntries,
   bodyBinaryPath,
+  bodyBinaryFileName,
   onBodyModeChange,
   onBodyChange,
   onBodyFormEntriesChange,
   onBodyMultipartEntriesChange,
   onBodyBinaryPathChange,
+  onBodyBinaryFileSelect,
+  onBodyBinaryClear,
 }: BodyPanelProps) {
   const { theme } = useTheme()
   const editorTheme = useMemo(() => {
@@ -94,6 +100,21 @@ export function BodyPanel({
     ...bodyMultipartEntries,
     { key: "", value: "", type: "text" as const },
   ]
+
+  function readFileAsBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        if (typeof reader.result !== "string") {
+          reject(new Error("Unable to read file"))
+          return
+        }
+        resolve(reader.result.split(",")[1] ?? "")
+      }
+      reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"))
+      reader.readAsDataURL(file)
+    })
+  }
 
   return (
     <TabsContent
@@ -290,35 +311,41 @@ export function BodyPanel({
                               <Input
                                 type="file"
                                 onChange={(event) => {
-                                  const fileName =
-                                    event.target.files?.[0]?.name ?? ""
-                                  if (isNew && !fileName.trim()) return
-                                  const next = isNew
-                                    ? [
-                                        ...bodyMultipartEntries,
-                                        {
-                                          key: "",
-                                          value: fileName,
-                                          type: "file" as const,
-                                        },
-                                      ]
-                                    : bodyMultipartEntries.map(
-                                        (item, rowIndex) =>
+                                  const file = event.target.files?.[0]
+                                  if (!file) return
+                                  void readFileAsBase64(file).then((fileBase64) => {
+                                    const fileName = file.name
+                                    if (isNew && !fileName.trim()) return
+                                    const next = isNew
+                                      ? [
+                                          ...bodyMultipartEntries,
+                                          {
+                                            key: "",
+                                            value: fileName,
+                                            type: "file" as const,
+                                            fileName,
+                                            fileBase64,
+                                          },
+                                        ]
+                                      : bodyMultipartEntries.map((item, rowIndex) =>
                                           rowIndex === index
                                             ? {
                                                 ...item,
                                                 value: fileName,
                                                 type: "file" as const,
+                                                fileName,
+                                                fileBase64,
                                               }
                                             : item
-                                      )
-                                  onBodyMultipartEntriesChange(next)
+                                        )
+                                    onBodyMultipartEntriesChange(next)
+                                  })
                                 }}
                                 className="h-7 rounded-md border-border/50 !bg-transparent text-xs file:mr-2 file:border-0 file:bg-transparent file:text-xs"
                               />
-                              {row.value && (
+                              {(row.fileName || row.value) && (
                                 <span className="max-w-32 truncate text-[11px] text-muted-foreground">
-                                  {row.value}
+                                  {row.fileName || row.value}
                                 </span>
                               )}
                             </div>
@@ -415,8 +442,11 @@ export function BodyPanel({
                 <Input
                   type="file"
                   onChange={(event) => {
-                    const fileName = event.target.files?.[0]?.name ?? ""
-                    onBodyBinaryPathChange(fileName)
+                    const file = event.target.files?.[0]
+                    if (!file) return
+                    void readFileAsBase64(file).then((fileBase64) => {
+                      onBodyBinaryFileSelect({ fileName: file.name, fileBase64 })
+                    })
                   }}
                   className="h-8 flex-1 rounded-md border-border/50 !bg-transparent text-xs file:mr-2 file:border-0 file:bg-transparent file:text-xs"
                 />
@@ -425,11 +455,16 @@ export function BodyPanel({
                   size="sm"
                   variant="ghost"
                   className="h-8 px-2 text-xs"
-                  onClick={() => onBodyBinaryPathChange("")}
+                  onClick={onBodyBinaryClear}
                 >
                   Clear
                 </Button>
               </div>
+              {bodyBinaryFileName && (
+                <p className="max-w-xl truncate text-[11px] text-muted-foreground">
+                  Selected file: {bodyBinaryFileName}
+                </p>
+              )}
               <Input
                 value={bodyBinaryPath}
                 onChange={(event) => onBodyBinaryPathChange(event.target.value)}

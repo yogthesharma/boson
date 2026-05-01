@@ -4,7 +4,13 @@ import type { RouteDefinition } from "@/api"
 export type RequestAssertion = RouteDefinition["tests"][number]
 export type RequestAuthConfig = NonNullable<RouteDefinition["auth"]>
 export type RequestVar = { key: string; value: string; enabled: boolean }
-export type MultipartField = { key: string; value: string; type: "text" | "file" }
+export type MultipartField = {
+  key: string
+  value: string
+  type: "text" | "file"
+  fileName?: string
+  fileBase64?: string
+}
 export type RequestBodyMode =
   | "none"
   | "json"
@@ -25,6 +31,8 @@ export type RequestTabState = {
   bodyFormEntries: Array<[string, string]>
   bodyMultipartEntries: MultipartField[]
   bodyBinaryPath: string
+  bodyBinaryFileName: string
+  bodyBinaryBase64: string
   assertions: RequestAssertion[]
   auth: {
     type: "none" | "basic" | "bearer" | "api_key"
@@ -159,8 +167,16 @@ export function normalizeMultipartRows(rows: MultipartField[]): MultipartField[]
       key: row.key ?? "",
       value: row.value ?? "",
       type: row.type === "file" ? "file" : "text",
+      fileName: row.fileName ?? "",
+      fileBase64: row.fileBase64 ?? "",
     }))
-    .filter((row) => row.key.trim().length > 0 || row.value.trim().length > 0)
+    .filter(
+      (row) =>
+        row.key.trim().length > 0 ||
+        row.value.trim().length > 0 ||
+        (row.fileName?.trim().length ?? 0) > 0 ||
+        (row.fileBase64?.trim().length ?? 0) > 0
+    )
 }
 
 export function getInitialRequestTabState(route: RouteDefinition): RequestTabState {
@@ -184,6 +200,8 @@ export function getInitialRequestTabState(route: RouteDefinition): RequestTabSta
       key: item.key,
       value: item.value ?? "",
       type: item.type === "file" ? "file" : "text",
+      fileName: "",
+      fileBase64: "",
     }))
   )
 
@@ -191,8 +209,18 @@ export function getInitialRequestTabState(route: RouteDefinition): RequestTabSta
     ([key]) => key.toLowerCase() === "content-type"
   )?.[1]
   const lowerContentType = (contentTypeHeader ?? "").toLowerCase()
+  const configMode = route.body_config?.mode
   const inferredBodyMode: RequestBodyMode =
-    route.file?.mode === "binary"
+    configMode === "none" ||
+    configMode === "json" ||
+    configMode === "xml" ||
+    configMode === "text" ||
+    configMode === "sparql" ||
+    configMode === "form_urlencoded" ||
+    configMode === "multipart_form" ||
+    configMode === "binary"
+      ? configMode
+      : route.file?.mode === "binary"
       ? "binary"
       : route.file?.mode === "multipart"
         ? "multipart_form"
@@ -209,40 +237,59 @@ export function getInitialRequestTabState(route: RouteDefinition): RequestTabSta
                   ? "text"
                   : "json"
 
+  const bodyFormEntriesFromConfig = normalizeEntryRows(
+    (route.body_config?.form_entries ?? []).map((entry) => [
+      entry.key,
+      entry.value ?? "",
+    ]) as Array<[string, string]>
+  )
+
   const bodyFormEntries =
-    inferredBodyMode === "form_urlencoded"
-      ? normalizeEntryRows(
-          (() => {
-            if (route.body && typeof route.body === "object" && !Array.isArray(route.body)) {
-              return Object.entries(route.body as Record<string, unknown>).map(([key, value]) => [
-                key,
-                String(value ?? ""),
-              ]) as Array<[string, string]>
-            }
-            if (typeof route.body === "string") {
-              return route.body
-                .split("&")
-                .map((part) => part.trim())
-                .filter(Boolean)
-                .map((pair) => {
-                  const [key, value = ""] = pair.split("=")
-                  return [decodeURIComponent(key), decodeURIComponent(value)] as [
-                    string,
-                    string,
-                  ]
-                })
-            }
-            return []
-          })()
-        )
-      : []
+    bodyFormEntriesFromConfig.length > 0
+      ? bodyFormEntriesFromConfig
+      : inferredBodyMode === "form_urlencoded"
+        ? normalizeEntryRows(
+            (() => {
+              if (route.body && typeof route.body === "object" && !Array.isArray(route.body)) {
+                return Object.entries(route.body as Record<string, unknown>).map(
+                  ([key, value]) => [key, String(value ?? "")]
+                ) as Array<[string, string]>
+              }
+              if (typeof route.body === "string") {
+                return route.body
+                  .split("&")
+                  .map((part) => part.trim())
+                  .filter(Boolean)
+                  .map((pair) => {
+                    const [key, value = ""] = pair.split("=")
+                    return [decodeURIComponent(key), decodeURIComponent(value)] as [
+                      string,
+                      string,
+                    ]
+                  })
+              }
+              return []
+            })()
+          )
+        : []
+
+  const bodyMultipartEntriesFromConfig = normalizeMultipartRows(
+    (route.body_config?.multipart_entries ?? []).map((item) => ({
+      key: item.key,
+      value: item.value ?? "",
+      type: item.type === "file" ? "file" : "text",
+      fileName: "",
+      fileBase64: "",
+    }))
+  )
 
   const bodyText =
-    typeof route.body === "string"
+    route.body_config?.raw ??
+    (typeof route.body === "string"
       ? route.body
       : route.body
         ? JSON.stringify(route.body, null, 2)
-        : ""
+        : "")
 
   return {
     method: route.method.toUpperCase(),
@@ -252,8 +299,11 @@ export function getInitialRequestTabState(route: RouteDefinition): RequestTabSta
     bodyMode: inferredBodyMode,
     bodyText,
     bodyFormEntries,
-    bodyMultipartEntries: multipart,
-    bodyBinaryPath: route.file?.path ?? "",
+    bodyMultipartEntries:
+      bodyMultipartEntriesFromConfig.length > 0 ? bodyMultipartEntriesFromConfig : multipart,
+    bodyBinaryPath: route.body_config?.binary_path ?? route.file?.path ?? "",
+    bodyBinaryFileName: "",
+    bodyBinaryBase64: "",
     assertions: route.tests ?? [],
     auth: {
       type: auth.type ?? "none",
@@ -346,6 +396,8 @@ export function toStateFingerprint(state: RequestTabState): string {
     headers: normalizeEntryRows(state.headers),
     bodyFormEntries: normalizeEntryRows(state.bodyFormEntries),
     bodyMultipartEntries: normalizeMultipartRows(state.bodyMultipartEntries),
+    bodyBinaryFileName: state.bodyBinaryFileName,
+    bodyBinaryBase64: state.bodyBinaryBase64,
     vars: normalizeVarRows(state.vars),
     file: { ...state.file, multipart: normalizeMultipartRows(state.file.multipart) },
   })

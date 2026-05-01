@@ -7,6 +7,21 @@ export type RouteDefinition = {
   group?: string
   headers: Record<string, string>
   body?: unknown
+  body_config?: {
+    mode?:
+      | "none"
+      | "json"
+      | "xml"
+      | "text"
+      | "sparql"
+      | "form_urlencoded"
+      | "multipart_form"
+      | "binary"
+    raw?: string
+    form_entries?: Array<{ key: string; value?: string }>
+    multipart_entries?: Array<{ key: string; value?: string; type?: "text" | "file" }>
+    binary_path?: string
+  }
   tests: Array<
     | { type: "status"; equals: number }
     | { type: "header_exists"; key: string }

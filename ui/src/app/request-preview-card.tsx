@@ -95,25 +95,51 @@ export function RequestPreviewCard(props: RequestPreviewCardProps) {
     }))
     let parsedBody: unknown = undefined
     const bodyText = currentState.bodyText.trim()
-    if (currentState.bodyMode !== "none" && bodyText.length > 0) {
-      if (currentState.bodyMode === "json") {
-        try {
-          parsedBody = JSON.parse(bodyText)
-        } catch {
-          parsedBody = bodyText
-        }
-      } else if (currentState.bodyMode === "form_urlencoded") {
-        parsedBody = Object.fromEntries(currentState.bodyFormEntries)
-      } else if (currentState.bodyMode === "multipart_form") {
-        parsedBody = currentState.bodyMultipartEntries.map((entry) => ({
-          key: entry.key,
-          value: entry.value,
-          type: entry.type,
-        }))
-      } else if (currentState.bodyMode === "binary") {
-        parsedBody = currentState.bodyBinaryPath
-      } else {
+    if (currentState.bodyMode === "json" && bodyText.length > 0) {
+      try {
+        parsedBody = JSON.parse(bodyText)
+      } catch {
         parsedBody = bodyText
+      }
+    } else if (currentState.bodyMode === "xml" && bodyText.length > 0) {
+      parsedBody = bodyText
+    } else if (currentState.bodyMode === "text" && bodyText.length > 0) {
+      parsedBody = bodyText
+    } else if (currentState.bodyMode === "sparql" && bodyText.length > 0) {
+      parsedBody = bodyText
+    } else if (
+      currentState.bodyMode === "form_urlencoded" &&
+      currentState.bodyFormEntries.length > 0
+    ) {
+      parsedBody = Object.fromEntries(currentState.bodyFormEntries)
+    } else if (
+      currentState.bodyMode === "multipart_form" &&
+      currentState.bodyMultipartEntries.length > 0
+    ) {
+      parsedBody = {
+        __boson_body: {
+          mode: "multipart_form",
+          entries: currentState.bodyMultipartEntries.map((entry) => ({
+            key: entry.key,
+            value: entry.value,
+            type: entry.type,
+            file_name: entry.fileName ?? "",
+            file_base64: entry.fileBase64 ?? "",
+          })),
+        },
+      }
+    } else if (
+      currentState.bodyMode === "binary" &&
+      (currentState.bodyBinaryPath.trim().length > 0 ||
+        currentState.bodyBinaryBase64.trim().length > 0)
+    ) {
+      parsedBody = {
+        __boson_body: {
+          mode: "binary",
+          path: currentState.bodyBinaryPath,
+          file_name: currentState.bodyBinaryFileName,
+          file_base64: currentState.bodyBinaryBase64,
+        },
       }
     }
 
@@ -157,7 +183,8 @@ export function RequestPreviewCard(props: RequestPreviewCardProps) {
     }
     if (
       currentState.bodyMode === "binary" &&
-      currentState.bodyBinaryPath.trim().length > 0 &&
+      (currentState.bodyBinaryPath.trim().length > 0 ||
+        currentState.bodyBinaryBase64.trim().length > 0) &&
       !hasHeader("Content-Type")
     ) {
       headers["Content-Type"] = "application/octet-stream"
@@ -274,6 +301,7 @@ export function RequestPreviewCard(props: RequestPreviewCardProps) {
                 bodyFormEntries={currentState?.bodyFormEntries ?? []}
                 bodyMultipartEntries={currentState?.bodyMultipartEntries ?? []}
                 bodyBinaryPath={currentState?.bodyBinaryPath ?? ""}
+                bodyBinaryFileName={currentState?.bodyBinaryFileName ?? ""}
                 onBodyModeChange={(mode) =>
                   currentState && updateCurrentRouteDraft({ ...currentState, bodyMode: mode })
                 }
@@ -291,6 +319,24 @@ export function RequestPreviewCard(props: RequestPreviewCardProps) {
                 onBodyBinaryPathChange={(path) =>
                   currentState &&
                   updateCurrentRouteDraft({ ...currentState, bodyBinaryPath: path })
+                }
+                onBodyBinaryFileSelect={({ fileName, fileBase64 }) =>
+                  currentState &&
+                  updateCurrentRouteDraft({
+                    ...currentState,
+                    bodyBinaryPath: fileName,
+                    bodyBinaryFileName: fileName,
+                    bodyBinaryBase64: fileBase64,
+                  })
+                }
+                onBodyBinaryClear={() =>
+                  currentState &&
+                  updateCurrentRouteDraft({
+                    ...currentState,
+                    bodyBinaryPath: "",
+                    bodyBinaryFileName: "",
+                    bodyBinaryBase64: "",
+                  })
                 }
               />
               <HeadersPanel

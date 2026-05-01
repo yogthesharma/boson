@@ -31,6 +31,8 @@ pub struct RouteDefinition {
     #[serde(default)]
     pub body: Option<Value>,
     #[serde(default)]
+    pub body_config: Option<RouteBodyConfig>,
+    #[serde(default)]
     pub tests: Vec<RouteTest>,
     #[serde(default)]
     pub auth: Option<RouteAuthConfig>,
@@ -44,6 +46,27 @@ pub struct RouteDefinition {
     pub file: Option<RouteFileConfig>,
     #[serde(default)]
     pub settings: Option<RouteSettingsConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteBodyConfig {
+    #[serde(default)]
+    pub mode: Option<String>,
+    #[serde(default)]
+    pub raw: Option<String>,
+    #[serde(default)]
+    pub form_entries: Vec<RouteBodyEntry>,
+    #[serde(default)]
+    pub multipart_entries: Vec<RouteMultipartField>,
+    #[serde(default)]
+    pub binary_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteBodyEntry {
+    pub key: String,
+    #[serde(default)]
+    pub value: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
