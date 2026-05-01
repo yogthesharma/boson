@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://boson.local/schemas/preset.schema.json",
+  "title": "Boson Preset Definition",
+  "type": "object",
+  "required": ["id", "name"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "headers": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "auth": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["none", "basic", "bearer", "api_key"] },
+        "basic": {
+          "type": "object",
+          "properties": {
+            "username": { "type": "string" },
+            "password": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "bearer": {
+          "type": "object",
+          "properties": { "token": { "type": "string" } },
+          "additionalProperties": false
+        },
+        "api_key": {
+          "type": "object",
+          "properties": {
+            "key": { "type": "string" },
+            "value": { "type": "string" },
+            "add_to": { "type": "string", "enum": ["header", "query"] }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "vars": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "value"],
+        "properties": {
+          "key": { "type": "string" },
+          "value": { "type": "string" },
+          "enabled": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "body_config": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "json",
+            "xml",
+            "text",
+            "sparql",
+            "form_urlencoded",
+            "multipart_form",
+            "binary"
+          ]
+        },
+        "raw": { "type": "string" },
+        "form_entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["key"],
+            "properties": {
+              "key": { "type": "string" },
+              "value": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "multipart_entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["key"],
+            "properties": {
+              "key": { "type": "string" },
+              "value": { "type": "string" },
+              "type": { "type": "string", "enum": ["text", "file"] }
+            },
+            "additionalProperties": false
+          }
+        },
+        "binary_path": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "settings": {
+      "type": "object",
+      "properties": {
+        "timeout_ms": { "type": "integer", "minimum": 0 },
+        "follow_redirects": { "type": "boolean" },
+        "retry_count": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

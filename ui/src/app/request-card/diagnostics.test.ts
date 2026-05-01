@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import type { RequestTabState } from "./helpers"
-import { computeRequestDiagnostics } from "./diagnostics"
+import {
+  computeRequestDiagnostics,
+  shouldShowDiagnosticsTab,
+  DEFAULT_DIAGNOSTIC_RULE_TOGGLES,
+} from "./diagnostics"
 
 function baseState(): RequestTabState {
   return {
@@ -69,4 +73,26 @@ test("flags auth conflicts and incomplete auth payload", () => {
   const result = computeRequestDiagnostics(state, [])
   assert.ok(result.errors.some((item) => item.code === "auth_bearer_incomplete"))
   assert.ok(result.warnings.some((item) => item.code === "auth_header_conflict"))
+})
+
+test("diagnostics tab visibility toggles by presence of diagnostics", () => {
+  const noIssues = computeRequestDiagnostics(baseState(), [])
+  assert.equal(shouldShowDiagnosticsTab(noIssues), false)
+  const withIssues = computeRequestDiagnostics(
+    { ...baseState(), bodyText: "{bad json" },
+    []
+  )
+  assert.equal(shouldShowDiagnosticsTab(withIssues), true)
+})
+
+test("diagnostics rule toggles can disable checks for future advanced mode", () => {
+  const noAuthChecks = computeRequestDiagnostics(
+    {
+      ...baseState(),
+      auth: { ...baseState().auth, type: "bearer", token: "" },
+    },
+    [],
+    { ...DEFAULT_DIAGNOSTIC_RULE_TOGGLES, authChecks: false }
+  )
+  assert.ok(!noAuthChecks.errors.some((item) => item.code === "auth_bearer_incomplete"))
 })

@@ -1,4 +1,4 @@
-use crate::schema::{EnvironmentConfig, ProjectConfig, RouteDefinition, WorkspaceSnapshot};
+use crate::schema::{EnvironmentConfig, PresetDefinition, ProjectConfig, RouteDefinition, WorkspaceSnapshot};
 use anyhow::{Context, Result};
 use jsonschema::Validator;
 use serde_json::Value;
@@ -11,16 +11,19 @@ pub fn load_workspace(root: &Path) -> Result<WorkspaceSnapshot> {
         .with_context(|| "failed to load .api/project.json")?;
 
     let environments_dir = api_root.join("environments");
+    let presets_dir = api_root.join("presets");
     let routes_dir = api_root.join("routes");
 
     let environments = read_environments_dir(&environments_dir)
         .with_context(|| "failed to load environment files")?;
+    let presets = read_presets_dir(&presets_dir).with_context(|| "failed to load preset files")?;
     let routes = read_routes_dir(&routes_dir)
         .with_context(|| "failed to load route files")?;
 
     Ok(WorkspaceSnapshot {
         project,
         environments,
+        presets,
         routes,
     })
 }
@@ -89,10 +92,45 @@ fn read_routes_dir(path: &Path) -> Result<Vec<RouteDefinition>> {
     Ok(items)
 }
 
+fn read_presets_dir(path: &Path) -> Result<Vec<PresetDefinition>> {
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut files = Vec::new();
+    collect_json_files(path, &mut files)?;
+    files.sort();
+
+    let schema = preset_schema_validator()?;
+    let mut items = Vec::new();
+    for file_path in files {
+        let content = fs::read_to_string(&file_path)?;
+        let raw_value: Value = serde_json::from_str(&content)
+            .with_context(|| format!("invalid JSON in {}", file_path.display()))?;
+        validate_route_value(&schema, &raw_value, &file_path)?;
+        let mut preset: PresetDefinition = serde_json::from_value(raw_value)
+            .with_context(|| format!("failed to parse preset {}", file_path.display()))?;
+        let rel = file_path
+            .strip_prefix(path)
+            .unwrap_or(&file_path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        preset.source_path = Some(rel);
+        items.push(preset);
+    }
+    Ok(items)
+}
+
 fn route_schema_validator() -> Result<Validator> {
     let schema: Value = serde_json::from_str(include_str!("route.schema.json"))
         .with_context(|| "invalid embedded route schema")?;
     jsonschema::validator_for(&schema).with_context(|| "failed to compile route schema")
+}
+
+fn preset_schema_validator() -> Result<Validator> {
+    let schema: Value = serde_json::from_str(include_str!("preset.schema.json"))
+        .with_context(|| "invalid embedded preset schema")?;
+    jsonschema::validator_for(&schema).with_context(|| "failed to compile preset schema")
 }
 
 fn validate_route_value(schema: &Validator, value: &Value, file_path: &Path) -> Result<()> {

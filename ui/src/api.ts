@@ -78,6 +78,18 @@ export type ProjectConfig = {
   default_environment: string
 }
 
+export type PresetDefinition = {
+  id: string
+  name: string
+  source_path?: string
+  description?: string
+  headers?: Record<string, string>
+  auth?: RouteDefinition["auth"]
+  vars?: RouteDefinition["vars"]
+  body_config?: RouteDefinition["body_config"]
+  settings?: RouteDefinition["settings"]
+}
+
 export type RunResult = {
   run_id: string
   route_id: string
@@ -132,6 +144,10 @@ export function getProject(): Promise<ProjectConfig> {
 
 export function getEnvironments(): Promise<EnvironmentConfig[]> {
   return readJson<EnvironmentConfig[]>(`${API_BASE}/api/environments`)
+}
+
+export function getPresets(): Promise<PresetDefinition[]> {
+  return readJson<PresetDefinition[]>(`${API_BASE}/api/presets`)
 }
 
 export function runRoute(

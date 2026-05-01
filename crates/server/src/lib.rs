@@ -13,7 +13,7 @@ use axum::{
 use boson_core::{
     execution::{run_route, RunResult},
     loader::load_workspace,
-    schema::{EnvironmentConfig, ProjectConfig, RouteDefinition, RouteTest, RouteVar, WorkspaceSnapshot},
+    schema::{EnvironmentConfig, PresetDefinition, ProjectConfig, RouteDefinition, RouteTest, RouteVar, WorkspaceSnapshot},
 };
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use reqwest::Client;
@@ -73,6 +73,7 @@ pub async fn run_local_server(root_dir: PathBuf, base_url: String, addr: SocketA
         .route("/api/project", get(get_project))
         .route("/api/routes", get(list_routes))
         .route("/api/environments", get(list_environments))
+        .route("/api/presets", get(list_presets))
         .route("/api/run/:route_id", post(run_route_handler))
         .route("/api/runs", get(list_runs).post(run_with_payload_handler))
         .route("/api/runs/:run_id", get(get_run_detail))
@@ -107,6 +108,11 @@ async fn get_project(State(state): State<Arc<AppState>>) -> Json<ProjectConfig> 
 async fn list_environments(State(state): State<Arc<AppState>>) -> Json<Vec<EnvironmentConfig>> {
     let snapshot = read_snapshot(&state).unwrap_or_else(|_| default_snapshot());
     Json(snapshot.environments)
+}
+
+async fn list_presets(State(state): State<Arc<AppState>>) -> Json<Vec<PresetDefinition>> {
+    let snapshot = read_snapshot(&state).unwrap_or_else(|_| default_snapshot());
+    Json(snapshot.presets)
 }
 
 
@@ -560,6 +566,7 @@ fn default_snapshot() -> WorkspaceSnapshot {
             default_environment: "local".to_string(),
         },
         environments: Vec::new(),
+        presets: Vec::new(),
         routes: Vec::new(),
     }
 }
@@ -822,6 +829,88 @@ mod tests {
 
         server_handle.abort();
         target_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn exposes_loaded_presets_via_api() {
+        let workspace = tempdir().expect("tempdir");
+        let root = workspace.path();
+        write_json_file(
+            &root.join(".api/project.json"),
+            json!({
+              "schema_version": "1",
+              "name": "Boson Test",
+              "default_environment": "local"
+            }),
+        );
+        write_json_file(
+            &root.join(".api/environments/local.json"),
+            json!({
+              "name": "local",
+              "variables": { "base_url": "http://127.0.0.1:8787" }
+            }),
+        );
+        write_json_file(
+            &root.join(".api/presets/json-defaults.json"),
+            json!({
+              "id": "json-defaults",
+              "name": "JSON Defaults",
+              "headers": {
+                "content-type": "application/json",
+                "accept": "application/json"
+              },
+              "body_config": {
+                "mode": "json",
+                "raw": "{\"ok\":true}"
+              }
+            }),
+        );
+        write_json_file(
+            &root.join(".api/routes/ping.json"),
+            json!({
+              "id": "ping",
+              "name": "Ping",
+              "method": "GET",
+              "path": "/demo/rest/resource",
+              "headers": {},
+              "tests": []
+            }),
+        );
+
+        let server_listener = TcpListener::bind("127.0.0.1:0").await.expect("bind server");
+        let server_addr = server_listener.local_addr().expect("server addr");
+        drop(server_listener);
+        let server_handle = tokio::spawn(run_local_server(
+            root.to_path_buf(),
+            "http://127.0.0.1:8787".to_string(),
+            server_addr,
+        ));
+
+        let server_base_url = format!("http://{}", server_addr);
+        wait_for_health(&server_base_url).await;
+        let client = reqwest::Client::new();
+        let presets: Vec<Value> = client
+            .get(format!("{}/api/presets", server_base_url))
+            .send()
+            .await
+            .expect("list presets")
+            .error_for_status()
+            .expect("status presets")
+            .json()
+            .await
+            .expect("presets json");
+
+        assert_eq!(presets.len(), 1);
+        assert_eq!(
+            presets[0].get("id").and_then(Value::as_str),
+            Some("json-defaults")
+        );
+        assert_eq!(
+            presets[0].get("source_path").and_then(Value::as_str),
+            Some("json-defaults.json")
+        );
+
+        server_handle.abort();
     }
 }
 

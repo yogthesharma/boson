@@ -1,5 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { RouteDefinition, RunRouteOverrides } from "@/api"
+import type { PresetDefinition, RouteDefinition, RunRouteOverrides } from "@/api"
 import { AuthPanel } from "@/app/request-card/auth-panel"
 import { BodyPanel } from "@/app/request-card/body-panel"
 import { DocsPanel } from "@/app/request-card/docs-panel"
@@ -22,8 +22,27 @@ import { SettingsPanel } from "@/app/request-card/settings-panel"
 import { TestsPanel } from "@/app/request-card/tests-panel"
 import { VarsPanel } from "@/app/request-card/vars-panel"
 import { computeMissingEnvironmentVariables } from "@/app/request-card/missing-vars"
-import { computeRequestDiagnostics } from "@/app/request-card/diagnostics"
+import {
+  computeRequestDiagnostics,
+  shouldShowDiagnosticsTab,
+} from "@/app/request-card/diagnostics"
+import { applyPresetToRequestState } from "@/app/request-card/preset-apply"
 import { useEffect, useMemo, useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   Table,
   TableBody,
@@ -39,6 +58,7 @@ type RequestDraftMap = Record<string, RequestTabState>
 
 type RequestPreviewCardProps = {
   selectedRoute?: RouteDefinition
+  presets: PresetDefinition[]
   activeEnvironment: string
   activeBaseUrl: string
   activeEnvironmentVariables: Record<string, string>
@@ -49,6 +69,7 @@ type RequestPreviewCardProps = {
 export function RequestPreviewCard(props: RequestPreviewCardProps) {
   const {
     selectedRoute,
+    presets,
     activeEnvironment,
     activeBaseUrl,
     activeEnvironmentVariables,
@@ -67,6 +88,12 @@ export function RequestPreviewCard(props: RequestPreviewCardProps) {
     }
   })
   const [activeTab, setActiveTab] = useState("params")
+  const [selectedPresetId, setSelectedPresetId] = useState<string>("")
+  const [lastPresetConflictFields, setLastPresetConflictFields] = useState<string[]>([])
+  const [previewConflictFields, setPreviewConflictFields] = useState<string[]>([])
+  const [previewTouchedSections, setPreviewTouchedSections] = useState<string[]>([])
+  const [lastAppliedPreset, setLastAppliedPreset] = useState<string>("")
+  const [lastAppliedLabel, setLastAppliedLabel] = useState<string>("")
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -95,6 +122,24 @@ export function RequestPreviewCard(props: RequestPreviewCardProps) {
 
   const headers = useMemo(() => currentState?.headers ?? [], [currentState])
   const queryEntries = useMemo(() => currentState?.params ?? [], [currentState])
+  const selectedPreset = useMemo(
+    () => presets.find((preset) => preset.id === selectedPresetId),
+    [presets, selectedPresetId]
+  )
+  const selectedPresetTouchedSections = useMemo(() => {
+    if (!selectedPreset) return []
+    const sections: string[] = []
+    if (selectedPreset.headers && Object.keys(selectedPreset.headers).length > 0) {
+      sections.push(`headers (${Object.keys(selectedPreset.headers).length})`)
+    }
+    if (selectedPreset.auth) sections.push("auth")
+    if (selectedPreset.vars && selectedPreset.vars.length > 0) {
+      sections.push(`vars (${selectedPreset.vars.length})`)
+    }
+    if (selectedPreset.body_config) sections.push("body")
+    if (selectedPreset.settings) sections.push("settings")
+    return sections
+  }, [selectedPreset])
   const runOverrides = useMemo<RunRouteOverrides | undefined>(() => {
     if (!currentState) return undefined
     const headers = Object.fromEntries(currentState.headers)
@@ -242,13 +287,6 @@ export function RequestPreviewCard(props: RequestPreviewCardProps) {
     () => ({
       errorCount: diagnostics.errors.length,
       warningCount: diagnostics.warnings.length,
-      summaryText:
-        diagnostics.items.length > 0
-          ? diagnostics.items
-              .slice(0, 2)
-              .map((item) => item.message)
-              .join(" | ")
-          : undefined,
       blockingMessage:
         diagnostics.errors.length > 0
           ? diagnostics.errors[0]?.message ?? "Fix diagnostics errors before running."
@@ -272,7 +310,6 @@ export function RequestPreviewCard(props: RequestPreviewCardProps) {
               requestUrl={currentState?.url ?? selectedRoute.path}
               activeEnvironment={activeEnvironment}
               activeBaseUrl={activeBaseUrl}
-              missingVariables={missingVariables}
               diagnostics={diagnosticsSummary}
               hasDraftChanges={hasDraftChanges}
               onMethodChange={(value) => {
@@ -321,6 +358,12 @@ export function RequestPreviewCard(props: RequestPreviewCardProps) {
                 </TabsTrigger>
                 <TabsTrigger value="auth">Auth</TabsTrigger>
                 <TabsTrigger value="vars">Vars</TabsTrigger>
+                <TabsTrigger value="presets">Presets</TabsTrigger>
+                {shouldShowDiagnosticsTab(diagnostics) && (
+                  <TabsTrigger value="diagnostics">
+                    Diagnostics ({diagnostics.errors.length}E/{diagnostics.warnings.length}W)
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="script">Script</TabsTrigger>
                 <TabsTrigger value="tests">
                   Assert ({selectedRoute.tests.length})
@@ -412,6 +455,169 @@ export function RequestPreviewCard(props: RequestPreviewCardProps) {
                   updateCurrentRouteDraft(withUpdatedVars(currentState, vars))
                 }
               />
+              <TabsContent
+                value="presets"
+                className="mt-1 flex min-h-0 flex-1 px-2 pb-2"
+              >
+                <div className="flex h-full min-h-0 w-full flex-col gap-3 overflow-auto rounded-md">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select value={selectedPresetId} onValueChange={setSelectedPresetId}>
+                      <SelectTrigger className="h-8 min-w-64 border-border/60 !bg-transparent text-xs">
+                        <SelectValue placeholder="Select preset..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {presets.length === 0 && (
+                          <SelectItem value="__none__" disabled>
+                            No presets found in .api/presets
+                          </SelectItem>
+                        )}
+                        {presets.map((preset) => (
+                          <SelectItem key={preset.id} value={preset.id}>
+                            {preset.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      disabled={!selectedPreset || !currentState}
+                      onClick={() => {
+                        if (!selectedPreset || !currentState) return
+                        const { nextState, conflicts } = applyPresetToRequestState(
+                          currentState,
+                          selectedPreset
+                        )
+                        updateCurrentRouteDraft(nextState)
+                        setLastPresetConflictFields(conflicts.map((item) => item.field))
+                        setLastAppliedPreset(selectedPreset.id)
+                        setLastAppliedLabel("just now")
+                      }}
+                    >
+                      Apply Preset
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-xs"
+                      disabled={!selectedPreset || !currentState}
+                      onClick={() => {
+                        if (!selectedPreset || !currentState) return
+                        const { conflicts } = applyPresetToRequestState(currentState, selectedPreset)
+                        setPreviewConflictFields(conflicts.map((item) => item.field))
+                        setPreviewTouchedSections(selectedPresetTouchedSections)
+                      }}
+                    >
+                      Dry-run Preview
+                    </Button>
+                    {lastPresetConflictFields.length > 0 && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="outline" className="h-6 text-[10px]">
+                              Overwrites {lastPresetConflictFields.length}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={6}>
+                            {lastPresetConflictFields.slice(0, 6).join(", ")}
+                            {lastPresetConflictFields.length > 6 ? " ..." : ""}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    {lastAppliedPreset === selectedPreset?.id && lastAppliedLabel && (
+                      <Badge variant="secondary" className="h-6 text-[10px]">
+                        Re-applied {lastAppliedLabel}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="rounded-md border border-border/60 bg-muted/10 px-3 py-2 text-xs text-muted-foreground">
+                    {selectedPreset ? (
+                      <>
+                        <p className="font-medium text-foreground">{selectedPreset.name}</p>
+                        <p className="mt-1">
+                          {selectedPreset.description ?? "No description provided."}
+                        </p>
+                        <p className="mt-2 font-mono text-[11px]">
+                          Source: .api/presets/{selectedPreset.source_path ?? `${selectedPreset.id}.json`}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {selectedPresetTouchedSections.length === 0 && (
+                            <Badge variant="outline" className="text-[10px]">
+                              no-op preset
+                            </Badge>
+                          )}
+                          {selectedPresetTouchedSections.map((section) => (
+                            <Badge key={section} variant="outline" className="text-[10px]">
+                              {section}
+                            </Badge>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <p>Select a preset, review impact, then apply it to current draft.</p>
+                    )}
+                  </div>
+                  {previewTouchedSections.length > 0 && (
+                    <div className="rounded-md border border-border/60 bg-background px-3 py-2 text-xs">
+                      <p className="font-medium text-foreground">Dry-run impact preview</p>
+                      <p className="mt-1 text-muted-foreground">
+                        Touches: {previewTouchedSections.join(", ")}
+                      </p>
+                      <p className="mt-1 text-muted-foreground">
+                        Overwrites: {previewConflictFields.length}
+                        {previewConflictFields.length > 0
+                          ? ` (${previewConflictFields.slice(0, 8).join(", ")}${
+                              previewConflictFields.length > 8 ? " ..." : ""
+                            })`
+                          : ""}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+              <TabsContent
+                value="diagnostics"
+                className="mt-1 flex min-h-0 flex-1 px-2 pb-2"
+              >
+                <div className="min-h-0 flex-1 overflow-auto rounded-md">
+                  <Table>
+                    <TableHeader className="[&_tr]:border-0">
+                      <TableRow className="border-0 bg-muted/30 hover:bg-muted/30">
+                        <TableHead className="h-auto px-3 py-2 text-xs text-muted-foreground">
+                          Severity
+                        </TableHead>
+                        <TableHead className="h-auto px-3 py-2 text-xs text-muted-foreground">
+                          Message
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody className="[&_tr:last-child]:border-0">
+                      {diagnostics.items.map((item) => (
+                        <TableRow
+                          key={`${item.code}-${item.message}`}
+                          className="border-0 odd:bg-muted/10 even:bg-background hover:bg-muted/20"
+                        >
+                          <TableCell className="px-3 py-2">
+                            <Badge
+                              variant={item.severity === "error" ? "destructive" : "outline"}
+                              className="h-6 text-[10px] uppercase"
+                            >
+                              {item.severity}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="px-3 py-2 text-sm text-foreground/90">
+                            {item.message}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </TabsContent>
               <ScriptPanel
                 script={currentState?.script ?? { preRequest: "", postResponse: "" }}
                 onChange={(script) =>

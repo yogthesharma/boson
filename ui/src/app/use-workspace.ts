@@ -4,10 +4,12 @@ import {
   listRuns,
   getEnvironments,
   getEventsUrl,
+  getPresets,
   getRoutes,
   rerun,
   runRoute,
   type EnvironmentConfig,
+  type PresetDefinition,
   type ProjectConfig,
   type RunRouteOverrides,
   type RouteDefinition,
@@ -21,6 +23,7 @@ const ACTIVE_ENVIRONMENT_STORAGE_KEY = "boson.active.environment.v1"
 export function useWorkspace() {
   const [project, setProject] = useState<ProjectConfig | null>(null)
   const [routes, setRoutes] = useState<RouteDefinition[]>([])
+  const [presets, setPresets] = useState<PresetDefinition[]>([])
   const [environments, setEnvironments] = useState<EnvironmentConfig[]>([])
   const [selectedEnvironmentName, setSelectedEnvironmentName] = useState<string>(() => {
     if (typeof window === "undefined") return ""
@@ -52,14 +55,16 @@ export function useWorkspace() {
     setIsLoading(true)
     setError("")
     try {
-      const [projectData, routesData, envData, runs] = await Promise.all([
+      const [projectData, routesData, presetData, envData, runs] = await Promise.all([
         getProject(),
         getRoutes(),
+        getPresets().catch(() => []),
         getEnvironments(),
         listRuns().catch(() => []),
       ])
       setProject(projectData)
       setRoutes(routesData)
+      setPresets(presetData)
       setEnvironments(envData)
       setSelectedEnvironmentName((current) => {
         if (current && envData.some((environment) => environment.name === current)) {
@@ -242,6 +247,7 @@ export function useWorkspace() {
 
   return {
     routes,
+    presets,
     selectedRoute,
     selectedRouteId,
     setSelectedRouteId,

@@ -32,6 +32,7 @@ This starts:
 
 - `GET /api/routes` - list route definitions from `.api/routes`
 - `GET /api/environments` - list environment definitions
+- `GET /api/presets` - list reusable preset snippets from `.api/presets`
 - `POST /api/run/:route_id` - execute a route with optional draft overrides
 - `GET /api/runs` - list persisted run summaries
 - `GET /api/runs/:run_id` - fetch full run detail
@@ -59,6 +60,7 @@ Validation failures include the offending route file path to speed up fixes.
 - Environment selector in UI with config-first source of truth (`.api/environments/*.json`)
 - Runtime `{{var}}` substitution across path, headers, and body flows
 - Missing environment variable warning in request bar before run
+- Config-first presets tab for applying reusable auth/header/body/settings snippets
 
 ## Environment Model
 
@@ -66,6 +68,23 @@ Validation failures include the offending route file path to speed up fixes.
 - UI responsibility: select active environment and preview run behavior
 - File edits auto-sync into UI via watcher + SSE
 - Secrets can be represented in environment config using `secret_keys`; UI treats env values as config data, not mutable state
+
+## Presets Model
+
+- Source of truth: `.api/presets/*.json`
+- Runtime API: `GET /api/presets`
+- UI: Presets tab applies snippets to **draft only** (no file writes)
+- Reset to default removes all draft-applied preset changes
+- Merge behavior:
+  - headers/vars/settings/auth/body template values are merged into current draft
+  - matching keys are overwritten (conflicts shown as overwrite preview)
+  - non-matching keys are added
+
+Example presets:
+
+- `bearer-service` for standard bearer auth + service headers
+- `json-defaults` for JSON headers + body template
+- `retry-strict` for timeout/retry settings profile
 
 ## Status
 

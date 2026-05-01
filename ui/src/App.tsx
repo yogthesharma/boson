@@ -14,6 +14,7 @@ import { useWorkspace } from "@/app/use-workspace"
 export function App() {
   const {
     routes,
+    presets,
     selectedRoute,
     setSelectedRouteId,
     activeEnvironment,
@@ -78,6 +79,7 @@ export function App() {
               <ResizablePanel defaultSize={54} minSize={25}>
                 <RequestPreviewCard
                   selectedRoute={selectedRoute}
+                  presets={presets}
                   activeEnvironment={activeEnvironment}
                   activeBaseUrl={activeBaseUrl}
                   activeEnvironmentVariables={activeEnvironmentVariables}

@@ -174,8 +174,29 @@ pub struct RouteSettingsConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PresetDefinition {
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub headers: BTreeMap<String, String>,
+    #[serde(default)]
+    pub auth: Option<RouteAuthConfig>,
+    #[serde(default)]
+    pub vars: Vec<RouteVar>,
+    #[serde(default)]
+    pub body_config: Option<RouteBodyConfig>,
+    #[serde(default)]
+    pub settings: Option<RouteSettingsConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceSnapshot {
     pub project: ProjectConfig,
     pub environments: Vec<EnvironmentConfig>,
+    pub presets: Vec<PresetDefinition>,
     pub routes: Vec<RouteDefinition>,
 }

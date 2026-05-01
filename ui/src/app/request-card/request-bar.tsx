@@ -31,11 +31,9 @@ type RequestBarProps = {
   requestUrl: string
   activeEnvironment: string
   activeBaseUrl: string
-  missingVariables: string[]
   diagnostics: {
     errorCount: number
     warningCount: number
-    summaryText?: string
     blockingMessage?: string
   }
   hasDraftChanges: boolean
@@ -61,7 +59,6 @@ export function RequestBar({
   requestUrl,
   activeEnvironment,
   activeBaseUrl,
-  missingVariables,
   diagnostics,
   hasDraftChanges,
   onMethodChange,
@@ -119,20 +116,6 @@ export function RequestBar({
           aria-label="Request URL"
           className="h-9 border-0 !bg-transparent pl-1 text-sm shadow-none focus-visible:ring-0"
         />
-      {missingVariables.length > 0 && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge variant="destructive" className="h-6 shrink-0 px-2 text-[10px]">
-                Missing vars ({missingVariables.length})
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent sideOffset={6}>
-              Missing environment variables: {missingVariables.join(", ")}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
       </div>
       {hasDraftChanges && (
         <Badge variant="outline" className="h-6 shrink-0 px-2 text-[11px]">
@@ -159,25 +142,6 @@ export function RequestBar({
         </TooltipProvider>
       )}
       <div className="ml-auto flex items-center gap-2">
-        {(diagnostics.errorCount > 0 || diagnostics.warningCount > 0) && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge
-                  variant={diagnostics.errorCount > 0 ? "destructive" : "outline"}
-                  className="h-6 shrink-0 px-2 text-[10px]"
-                >
-                  {diagnostics.errorCount}E/{diagnostics.warningCount}W
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent sideOffset={6}>
-                {diagnostics.summaryText ??
-                  diagnostics.blockingMessage ??
-                  "Warnings detected. You can still run this request."}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -192,12 +156,9 @@ export function RequestBar({
                 </Button>
               </span>
             </TooltipTrigger>
-            {(hasDraftChanges ||
-              diagnostics.errorCount > 0 ||
-              diagnostics.warningCount > 0) && (
+            {(hasDraftChanges || diagnostics.errorCount > 0) && (
               <TooltipContent sideOffset={6}>
                 {diagnostics.blockingMessage ??
-                  diagnostics.summaryText ??
                   "Edits are local preview only; run uses code route."}
               </TooltipContent>
             )}
