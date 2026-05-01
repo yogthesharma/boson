@@ -86,6 +86,8 @@ export function RequestPreviewCard(props: RequestPreviewCardProps) {
   const runOverrides = useMemo<RunRouteOverrides | undefined>(() => {
     if (!currentState) return undefined
     const headers = Object.fromEntries(currentState.headers)
+    const hasHeader = (name: string) =>
+      Object.keys(headers).some((key) => key.toLowerCase() === name.toLowerCase())
     const vars = currentState.vars.map((item) => ({
       key: item.key,
       value: item.value,
@@ -93,12 +95,72 @@ export function RequestPreviewCard(props: RequestPreviewCardProps) {
     }))
     let parsedBody: unknown = undefined
     const bodyText = currentState.bodyText.trim()
-    if (bodyText.length > 0) {
-      try {
-        parsedBody = JSON.parse(bodyText)
-      } catch {
+    if (currentState.bodyMode !== "none" && bodyText.length > 0) {
+      if (currentState.bodyMode === "json") {
+        try {
+          parsedBody = JSON.parse(bodyText)
+        } catch {
+          parsedBody = bodyText
+        }
+      } else if (currentState.bodyMode === "form_urlencoded") {
+        parsedBody = Object.fromEntries(currentState.bodyFormEntries)
+      } else if (currentState.bodyMode === "multipart_form") {
+        parsedBody = currentState.bodyMultipartEntries.map((entry) => ({
+          key: entry.key,
+          value: entry.value,
+          type: entry.type,
+        }))
+      } else if (currentState.bodyMode === "binary") {
+        parsedBody = currentState.bodyBinaryPath
+      } else {
         parsedBody = bodyText
       }
+    }
+
+    if (currentState.bodyMode === "json" && bodyText.length > 0 && !hasHeader("Content-Type")) {
+      headers["Content-Type"] = "application/json"
+    }
+    if (
+      currentState.bodyMode === "xml" &&
+      bodyText.length > 0 &&
+      !hasHeader("Content-Type")
+    ) {
+      headers["Content-Type"] = "application/xml"
+    }
+    if (
+      currentState.bodyMode === "text" &&
+      bodyText.length > 0 &&
+      !hasHeader("Content-Type")
+    ) {
+      headers["Content-Type"] = "text/plain"
+    }
+    if (
+      currentState.bodyMode === "sparql" &&
+      bodyText.length > 0 &&
+      !hasHeader("Content-Type")
+    ) {
+      headers["Content-Type"] = "application/sparql-query"
+    }
+    if (
+      currentState.bodyMode === "form_urlencoded" &&
+      currentState.bodyFormEntries.length > 0 &&
+      !hasHeader("Content-Type")
+    ) {
+      headers["Content-Type"] = "application/x-www-form-urlencoded"
+    }
+    if (
+      currentState.bodyMode === "multipart_form" &&
+      currentState.bodyMultipartEntries.length > 0 &&
+      !hasHeader("Content-Type")
+    ) {
+      headers["Content-Type"] = "multipart/form-data"
+    }
+    if (
+      currentState.bodyMode === "binary" &&
+      currentState.bodyBinaryPath.trim().length > 0 &&
+      !hasHeader("Content-Type")
+    ) {
+      headers["Content-Type"] = "application/octet-stream"
     }
     return {
       method: currentState.method,
@@ -207,9 +269,28 @@ export function RequestPreviewCard(props: RequestPreviewCardProps) {
                 }}
               />
               <BodyPanel
+                bodyMode={currentState?.bodyMode ?? "none"}
                 bodyText={currentState?.bodyText ?? ""}
+                bodyFormEntries={currentState?.bodyFormEntries ?? []}
+                bodyMultipartEntries={currentState?.bodyMultipartEntries ?? []}
+                bodyBinaryPath={currentState?.bodyBinaryPath ?? ""}
+                onBodyModeChange={(mode) =>
+                  currentState && updateCurrentRouteDraft({ ...currentState, bodyMode: mode })
+                }
                 onBodyChange={(value) =>
                   currentState && updateCurrentRouteDraft({ ...currentState, bodyText: value })
+                }
+                onBodyFormEntriesChange={(entries) =>
+                  currentState &&
+                  updateCurrentRouteDraft({ ...currentState, bodyFormEntries: entries })
+                }
+                onBodyMultipartEntriesChange={(entries) =>
+                  currentState &&
+                  updateCurrentRouteDraft({ ...currentState, bodyMultipartEntries: entries })
+                }
+                onBodyBinaryPathChange={(path) =>
+                  currentState &&
+                  updateCurrentRouteDraft({ ...currentState, bodyBinaryPath: path })
                 }
               />
               <HeadersPanel

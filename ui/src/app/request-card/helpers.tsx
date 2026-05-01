@@ -5,13 +5,26 @@ export type RequestAssertion = RouteDefinition["tests"][number]
 export type RequestAuthConfig = NonNullable<RouteDefinition["auth"]>
 export type RequestVar = { key: string; value: string; enabled: boolean }
 export type MultipartField = { key: string; value: string; type: "text" | "file" }
+export type RequestBodyMode =
+  | "none"
+  | "json"
+  | "xml"
+  | "text"
+  | "sparql"
+  | "form_urlencoded"
+  | "multipart_form"
+  | "binary"
 
 export type RequestTabState = {
   method: string
   url: string
   params: Array<[string, string]>
   headers: Array<[string, string]>
+  bodyMode: RequestBodyMode
   bodyText: string
+  bodyFormEntries: Array<[string, string]>
+  bodyMultipartEntries: MultipartField[]
+  bodyBinaryPath: string
   assertions: RequestAssertion[]
   auth: {
     type: "none" | "basic" | "bearer" | "api_key"
@@ -174,12 +187,73 @@ export function getInitialRequestTabState(route: RouteDefinition): RequestTabSta
     }))
   )
 
+  const contentTypeHeader = Object.entries(route.headers ?? {}).find(
+    ([key]) => key.toLowerCase() === "content-type"
+  )?.[1]
+  const lowerContentType = (contentTypeHeader ?? "").toLowerCase()
+  const inferredBodyMode: RequestBodyMode =
+    route.file?.mode === "binary"
+      ? "binary"
+      : route.file?.mode === "multipart"
+        ? "multipart_form"
+        : route.body === undefined
+          ? "none"
+          : lowerContentType.includes("application/x-www-form-urlencoded")
+            ? "form_urlencoded"
+            : lowerContentType.includes("application/sparql-query")
+              ? "sparql"
+              : lowerContentType.includes("application/xml") ||
+                  lowerContentType.includes("text/xml")
+                ? "xml"
+                : lowerContentType.includes("text/plain")
+                  ? "text"
+                  : "json"
+
+  const bodyFormEntries =
+    inferredBodyMode === "form_urlencoded"
+      ? normalizeEntryRows(
+          (() => {
+            if (route.body && typeof route.body === "object" && !Array.isArray(route.body)) {
+              return Object.entries(route.body as Record<string, unknown>).map(([key, value]) => [
+                key,
+                String(value ?? ""),
+              ]) as Array<[string, string]>
+            }
+            if (typeof route.body === "string") {
+              return route.body
+                .split("&")
+                .map((part) => part.trim())
+                .filter(Boolean)
+                .map((pair) => {
+                  const [key, value = ""] = pair.split("=")
+                  return [decodeURIComponent(key), decodeURIComponent(value)] as [
+                    string,
+                    string,
+                  ]
+                })
+            }
+            return []
+          })()
+        )
+      : []
+
+  const bodyText =
+    typeof route.body === "string"
+      ? route.body
+      : route.body
+        ? JSON.stringify(route.body, null, 2)
+        : ""
+
   return {
     method: route.method.toUpperCase(),
     url: route.path,
     params,
     headers,
-    bodyText: route.body ? JSON.stringify(route.body, null, 2) : "",
+    bodyMode: inferredBodyMode,
+    bodyText,
+    bodyFormEntries,
+    bodyMultipartEntries: multipart,
+    bodyBinaryPath: route.file?.path ?? "",
     assertions: route.tests ?? [],
     auth: {
       type: auth.type ?? "none",
@@ -270,6 +344,8 @@ export function toStateFingerprint(state: RequestTabState): string {
     ...state,
     params: normalizeEntryRows(state.params),
     headers: normalizeEntryRows(state.headers),
+    bodyFormEntries: normalizeEntryRows(state.bodyFormEntries),
+    bodyMultipartEntries: normalizeMultipartRows(state.bodyMultipartEntries),
     vars: normalizeVarRows(state.vars),
     file: { ...state.file, multipart: normalizeMultipartRows(state.file.multipart) },
   })

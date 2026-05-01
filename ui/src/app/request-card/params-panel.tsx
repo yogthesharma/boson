@@ -1,9 +1,9 @@
 import { TabsContent } from "@/components/ui/tabs"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Editor from "@monaco-editor/react"
 import { Input } from "@/components/ui/input"
 import { useTheme } from "@/components/theme-provider"
-import { ArrowDown, ArrowUp, Info } from "@phosphor-icons/react"
+import { ArrowDown, ArrowUp, Info, Trash } from "@phosphor-icons/react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -18,6 +18,12 @@ import {
 type ParamsPanelProps = {
   queryEntries: Array<[string, string]>
   onQueryEntriesChange: (nextEntries: Array<[string, string]>) => void
+}
+
+type ParamRow = {
+  key: string
+  value: string
+  enabled: boolean
 }
 
 function toBulkText(entries: Array<[string, string]>): string {
@@ -35,7 +41,10 @@ function fromBulkText(value: string): Array<[string, string]> {
 
       // Preferred syntax: "key":"value"
       try {
-        const parsed = JSON.parse(`{${normalizedLine}}`) as Record<string, unknown>
+        const parsed = JSON.parse(`{${normalizedLine}}`) as Record<
+          string,
+          unknown
+        >
         const [firstKey] = Object.keys(parsed)
         if (firstKey !== undefined) {
           return [firstKey, String(parsed[firstKey] ?? "")] as [string, string]
@@ -49,7 +58,10 @@ function fromBulkText(value: string): Array<[string, string]> {
       if (colonIndex !== -1) {
         return [
           normalizedLine.slice(0, colonIndex).trim().replace(/^"|"$/g, ""),
-          normalizedLine.slice(colonIndex + 1).trim().replace(/^"|"$/g, ""),
+          normalizedLine
+            .slice(colonIndex + 1)
+            .trim()
+            .replace(/^"|"$/g, ""),
         ] as [string, string]
       }
 
@@ -73,7 +85,10 @@ export function ParamsPanel({
 }: ParamsPanelProps) {
   const [mode, setMode] = useState<"table" | "bulk">("table")
   const [bulkValue, setBulkValue] = useState("")
-  const [enabledRows, setEnabledRows] = useState<Record<number, boolean>>({})
+  const [rows, setRows] = useState<ParamRow[]>(() =>
+    queryEntries.map(([key, value]) => ({ key, value, enabled: true }))
+  )
+  const lastEmittedFingerprintRef = useRef("")
   const { theme } = useTheme()
   const editorTheme = useMemo(() => {
     if (theme === "dark") return "vs-dark"
@@ -86,52 +101,79 @@ export function ParamsPanel({
     }
     return "vs"
   }, [theme])
-  const displayedEntries = useMemo<Array<[string, string]>>(
-    () => [...queryEntries, ["", ""]],
-    [queryEntries]
+  const displayedRows = useMemo<ParamRow[]>(
+    () => [...rows, { key: "", value: "", enabled: true }],
+    [rows]
   )
 
   useEffect(() => {
     setBulkValue(toBulkText(queryEntries))
   }, [queryEntries])
 
-  function onRowChange(index: number, field: "key" | "value", nextValue: string) {
-    const isNewRow = index >= queryEntries.length
-    const target = queryEntries[index] ?? ["", ""]
-    const nextEntries = isNewRow
-      ? nextValue
-        ? [
-            ...queryEntries,
-            (field === "key" ? [nextValue, ""] : ["", nextValue]) as [
-              string,
-              string,
-            ],
-          ]
-        : queryEntries
-      : queryEntries
-          .map((entry, entryIndex) => {
-            if (entryIndex !== index) return entry
-            return (field === "key"
-              ? [nextValue, entry[1]]
-              : [entry[0], nextValue]) as [string, string]
-          })
-          .filter((_, entryIndex) => {
-            if (entryIndex !== index) return true
-            const nextKey = field === "key" ? nextValue : target[0]
-            const nextValueForEntry = field === "value" ? nextValue : target[1]
-            return nextKey.trim().length > 0 || nextValueForEntry.trim().length > 0
-          })
+  useEffect(() => {
+    const incomingFingerprint = JSON.stringify(queryEntries)
+    if (incomingFingerprint === lastEmittedFingerprintRef.current) return
+    setRows(queryEntries.map(([key, value]) => ({ key, value, enabled: true })))
+  }, [queryEntries])
+
+  function emitActiveRows(nextRows: ParamRow[]) {
+    const nextEntries = nextRows
+      .filter(
+        (row) =>
+          row.enabled &&
+          (row.key.trim().length > 0 || row.value.trim().length > 0)
+      )
+      .map((row) => [row.key, row.value] as [string, string])
+    lastEmittedFingerprintRef.current = JSON.stringify(nextEntries)
     onQueryEntriesChange(nextEntries)
+  }
+
+  function onRowChange(
+    index: number,
+    field: "key" | "value",
+    nextValue: string
+  ) {
+    const isNewRow = index >= rows.length
+    if (isNewRow && nextValue.trim().length === 0) return
+
+    const nextRows = isNewRow
+      ? [
+          ...rows,
+          field === "key"
+            ? { key: nextValue, value: "", enabled: true }
+            : { key: "", value: nextValue, enabled: true },
+        ]
+      : rows.map((row, rowIndex) =>
+          rowIndex === index ? { ...row, [field]: nextValue } : row
+        )
+    setRows(nextRows)
+    emitActiveRows(nextRows)
   }
 
   function moveRow(index: number, direction: "up" | "down") {
     const targetIndex = direction === "up" ? index - 1 : index + 1
-    if (index < 0 || targetIndex < 0 || targetIndex >= queryEntries.length) return
-    const next = [...queryEntries]
+    if (index < 0 || targetIndex < 0 || targetIndex >= rows.length) return
+    const next = [...rows]
     const current = next[index]
     next[index] = next[targetIndex]
     next[targetIndex] = current
-    onQueryEntriesChange(next)
+    setRows(next)
+    emitActiveRows(next)
+  }
+
+  function toggleRow(index: number, enabled: boolean) {
+    const nextRows = rows.map((row, rowIndex) =>
+      rowIndex === index ? { ...row, enabled } : row
+    )
+    setRows(nextRows)
+    emitActiveRows(nextRows)
+  }
+
+  function deleteRow(index: number) {
+    if (index < 0 || index >= rows.length) return
+    const nextRows = rows.filter((_, rowIndex) => rowIndex !== index)
+    setRows(nextRows)
+    emitActiveRows(nextRows)
   }
 
   return (
@@ -153,83 +195,107 @@ export function ParamsPanel({
                       Value
                     </TableHead>
                     <TableHead className="h-auto px-3 py-2 text-right text-xs text-muted-foreground">
-                      Move
+                      Actions
                     </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody className="[&_tr:last-child]:border-0">
-                  {displayedEntries.map(([key, value], index) => (
-                    <TableRow
-                      key={`param-row-${index}`}
-                      className="border-0 odd:bg-muted/10 even:bg-background hover:bg-muted/20"
-                    >
-                      <TableCell className="px-3 py-2">
-                        <Switch
-                          checked={enabledRows[index] ?? true}
-                          onCheckedChange={(checked) =>
-                            setEnabledRows((current) => ({ ...current, [index]: checked }))
-                          }
-                          aria-label={`Enable param row ${index + 1}`}
-                        />
-                      </TableCell>
-                      <TableCell className="px-3 py-2">
-                        <Input
-                          value={key}
-                          onChange={(event) =>
-                            onRowChange(index, "key", event.target.value)
-                          }
-                          disabled={(enabledRows[index] ?? true) === false}
-                          className="h-7 rounded-md border-border/50 !bg-transparent font-mono text-xs text-foreground/90"
-                          aria-label={`Param name ${index + 1}`}
-                          placeholder="Name"
-                        />
-                        {value.trim().length > 0 && key.trim().length === 0 && (
-                          <p className="pt-1 text-[11px] text-amber-500">Parameter name is required.</p>
-                        )}
-                        {/\s/.test(key.trim()) && key.trim().length > 0 && (
-                          <p className="pt-1 text-[11px] text-amber-500">Use URL-safe names (no spaces).</p>
-                        )}
-                      </TableCell>
-                      <TableCell className="px-3 py-2">
-                        <Input
-                          value={value}
-                          onChange={(event) =>
-                            onRowChange(index, "value", event.target.value)
-                          }
-                          disabled={(enabledRows[index] ?? true) === false}
-                          className="h-7 rounded-md border-border/50 !bg-transparent font-mono text-xs text-foreground/80"
-                          aria-label={`Param value ${index + 1}`}
-                          placeholder="Value"
-                        />
-                      </TableCell>
-                      <TableCell className="px-3 py-2">
-                        {index < queryEntries.length && (
-                          <div className="flex justify-end gap-1">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0"
-                              disabled={index === 0}
-                              onClick={() => moveRow(index, "up")}
-                            >
-                              <ArrowUp className="size-3.5" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0"
-                              disabled={index >= queryEntries.length - 1}
-                              onClick={() => moveRow(index, "down")}
-                            >
-                              <ArrowDown className="size-3.5" />
-                            </Button>
-                          </div>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {displayedRows.map((row, index) => {
+                    const rowHasContent =
+                      row.key.trim().length > 0 || row.value.trim().length > 0
+                    const isPersistedRow = index < rows.length
+                    return (
+                      <TableRow
+                        key={`param-row-${index}`}
+                        className="border-0 odd:bg-muted/10 even:bg-background hover:bg-muted/20"
+                      >
+                        <TableCell className="px-3 py-2">
+                          {rowHasContent ? (
+                            <Switch
+                              checked={row.enabled}
+                              onCheckedChange={(checked) =>
+                                toggleRow(index, checked)
+                              }
+                              aria-label={`Enable param row ${index + 1}`}
+                            />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              -
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="px-3 py-2">
+                          <Input
+                            value={row.key}
+                            onChange={(event) =>
+                              onRowChange(index, "key", event.target.value)
+                            }
+                            className="h-7 rounded-md border-border/50 !bg-transparent font-mono text-xs text-foreground/90"
+                            aria-label={`Param name ${index + 1}`}
+                            placeholder="Name"
+                          />
+                          {row.value.trim().length > 0 &&
+                            row.key.trim().length === 0 && (
+                              <p className="pt-1 text-[11px] text-amber-500">
+                                Parameter name is required.
+                              </p>
+                            )}
+                          {/\s/.test(row.key.trim()) &&
+                            row.key.trim().length > 0 && (
+                              <p className="pt-1 text-[11px] text-amber-500">
+                                Use URL-safe names (no spaces).
+                              </p>
+                            )}
+                        </TableCell>
+                        <TableCell className="px-3 py-2">
+                          <Input
+                            value={row.value}
+                            onChange={(event) =>
+                              onRowChange(index, "value", event.target.value)
+                            }
+                            className="h-7 rounded-md border-border/50 !bg-transparent font-mono text-xs text-foreground/80"
+                            aria-label={`Param value ${index + 1}`}
+                            placeholder="Value"
+                          />
+                        </TableCell>
+                        <TableCell className="px-3 py-2">
+                          {isPersistedRow && (
+                            <div className="flex justify-end gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0"
+                                disabled={index === 0}
+                                onClick={() => moveRow(index, "up")}
+                              >
+                                <ArrowUp className="size-3.5" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0"
+                                disabled={index >= rows.length - 1}
+                                onClick={() => moveRow(index, "down")}
+                              >
+                                <ArrowDown className="size-3.5" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 text-rose-400 hover:text-rose-300"
+                                onClick={() => deleteRow(index)}
+                              >
+                                <Trash className="size-3.5" />
+                              </Button>
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -244,7 +310,14 @@ export function ParamsPanel({
               onChange={(value) => {
                 const next = value ?? ""
                 setBulkValue(next)
-                onQueryEntriesChange(fromBulkText(next))
+                const nextEntries = fromBulkText(next)
+                const nextRows = nextEntries.map(([key, value]) => ({
+                  key,
+                  value,
+                  enabled: true,
+                }))
+                setRows(nextRows)
+                emitActiveRows(nextRows)
               }}
               options={{
                 minimap: { enabled: false },
@@ -264,16 +337,14 @@ export function ParamsPanel({
           </div>
         )}
         <div className="flex items-center justify-between px-3 py-2">
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <span>Path</span>
-            <Info className="size-3.5" />
-          </div>
           <Button
             type="button"
             variant="link"
             size="sm"
             className="h-6 px-0 text-xs"
-            onClick={() => setMode((current) => (current === "table" ? "bulk" : "table"))}
+            onClick={() =>
+              setMode((current) => (current === "table" ? "bulk" : "table"))
+            }
           >
             {mode === "table" ? "Bulk Edit" : "Key/Value Edit"}
           </Button>

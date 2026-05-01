@@ -41,7 +41,38 @@ pub async fn run_route(
     }
 
     if let Some(body) = &route.body {
-        request = request.json(body);
+        let content_type = route
+            .headers
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case("content-type"))
+            .map(|(_, value)| value.to_ascii_lowercase())
+            .unwrap_or_default();
+
+        if content_type.contains("application/x-www-form-urlencoded") {
+            if let Some(object) = body.as_object() {
+                let form_map = object
+                    .iter()
+                    .map(|(key, value)| {
+                        let value = value
+                            .as_str()
+                            .map(ToString::to_string)
+                            .unwrap_or_else(|| value.to_string());
+                        (key.clone(), value)
+                    })
+                    .collect::<BTreeMap<String, String>>();
+                request = request.form(&form_map);
+            } else if let Some(raw) = body.as_str() {
+                request = request.body(raw.to_string());
+            } else {
+                request = request.body(body.to_string());
+            }
+        } else if content_type.contains("application/json") || content_type.contains("+json") {
+            request = request.json(body);
+        } else if let Some(raw) = body.as_str() {
+            request = request.body(raw.to_string());
+        } else {
+            request = request.json(body);
+        }
     }
 
     let start = Instant::now();
