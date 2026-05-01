@@ -56,12 +56,35 @@ export type EnvironmentConfig = {
 }
 
 export type RunResult = {
+  run_id: string
   route_id: string
   status: number
   elapsed_ms: number
   response_headers: Record<string, string>
   response_body?: unknown
   test_results: Array<{ passed: boolean; message: string }>
+}
+
+export type RunHistorySummary = {
+  run_id: string
+  route_id: string
+  route_name: string
+  method: string
+  path: string
+  created_at_ms: number
+  status: number
+  ok: boolean
+}
+
+export type RunHistoryDetail = {
+  run_id: string
+  route_id: string
+  route_name: string
+  method: string
+  path: string
+  created_at_ms: number
+  overrides?: RunRouteOverrides
+  result: RunResult
 }
 
 const API_BASE =
@@ -91,6 +114,20 @@ export function runRoute(
     method: "POST",
     headers: overrides ? { "Content-Type": "application/json" } : undefined,
     body: overrides ? JSON.stringify(overrides) : undefined,
+  })
+}
+
+export function listRuns(): Promise<RunHistorySummary[]> {
+  return readJson<RunHistorySummary[]>(`${API_BASE}/api/runs`)
+}
+
+export function getRunDetail(runId: string): Promise<RunHistoryDetail> {
+  return readJson<RunHistoryDetail>(`${API_BASE}/api/runs/${runId}`)
+}
+
+export function rerun(runId: string): Promise<RunResult> {
+  return readJson<RunResult>(`${API_BASE}/api/runs/${runId}/re-run`, {
+    method: "POST",
   })
 }
 

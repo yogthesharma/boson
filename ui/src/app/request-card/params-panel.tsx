@@ -3,8 +3,9 @@ import { useEffect, useMemo, useState } from "react"
 import Editor from "@monaco-editor/react"
 import { Input } from "@/components/ui/input"
 import { useTheme } from "@/components/theme-provider"
-import { Info } from "@phosphor-icons/react"
+import { ArrowDown, ArrowUp, Info } from "@phosphor-icons/react"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
 import {
   Table,
   TableBody,
@@ -72,6 +73,7 @@ export function ParamsPanel({
 }: ParamsPanelProps) {
   const [mode, setMode] = useState<"table" | "bulk">("table")
   const [bulkValue, setBulkValue] = useState("")
+  const [enabledRows, setEnabledRows] = useState<Record<number, boolean>>({})
   const { theme } = useTheme()
   const editorTheme = useMemo(() => {
     if (theme === "dark") return "vs-dark"
@@ -122,6 +124,16 @@ export function ParamsPanel({
     onQueryEntriesChange(nextEntries)
   }
 
+  function moveRow(index: number, direction: "up" | "down") {
+    const targetIndex = direction === "up" ? index - 1 : index + 1
+    if (index < 0 || targetIndex < 0 || targetIndex >= queryEntries.length) return
+    const next = [...queryEntries]
+    const current = next[index]
+    next[index] = next[targetIndex]
+    next[targetIndex] = current
+    onQueryEntriesChange(next)
+  }
+
   return (
     <TabsContent value="params" className="mt-1 flex min-h-0 flex-1 px-2 pb-2">
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-md">
@@ -132,10 +144,16 @@ export function ParamsPanel({
                 <TableHeader className="[&_tr]:border-0">
                   <TableRow className="border-0 bg-muted/30 hover:bg-muted/30">
                     <TableHead className="h-auto px-3 py-2 text-xs text-muted-foreground">
+                      On
+                    </TableHead>
+                    <TableHead className="h-auto px-3 py-2 text-xs text-muted-foreground">
                       Name
                     </TableHead>
                     <TableHead className="h-auto px-3 py-2 text-xs text-muted-foreground">
                       Value
+                    </TableHead>
+                    <TableHead className="h-auto px-3 py-2 text-right text-xs text-muted-foreground">
+                      Move
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -146,15 +164,31 @@ export function ParamsPanel({
                       className="border-0 odd:bg-muted/10 even:bg-background hover:bg-muted/20"
                     >
                       <TableCell className="px-3 py-2">
+                        <Switch
+                          checked={enabledRows[index] ?? true}
+                          onCheckedChange={(checked) =>
+                            setEnabledRows((current) => ({ ...current, [index]: checked }))
+                          }
+                          aria-label={`Enable param row ${index + 1}`}
+                        />
+                      </TableCell>
+                      <TableCell className="px-3 py-2">
                         <Input
                           value={key}
                           onChange={(event) =>
                             onRowChange(index, "key", event.target.value)
                           }
+                          disabled={(enabledRows[index] ?? true) === false}
                           className="h-7 rounded-md border-border/50 !bg-transparent font-mono text-xs text-foreground/90"
                           aria-label={`Param name ${index + 1}`}
                           placeholder="Name"
                         />
+                        {value.trim().length > 0 && key.trim().length === 0 && (
+                          <p className="pt-1 text-[11px] text-amber-500">Parameter name is required.</p>
+                        )}
+                        {/\s/.test(key.trim()) && key.trim().length > 0 && (
+                          <p className="pt-1 text-[11px] text-amber-500">Use URL-safe names (no spaces).</p>
+                        )}
                       </TableCell>
                       <TableCell className="px-3 py-2">
                         <Input
@@ -162,10 +196,37 @@ export function ParamsPanel({
                           onChange={(event) =>
                             onRowChange(index, "value", event.target.value)
                           }
+                          disabled={(enabledRows[index] ?? true) === false}
                           className="h-7 rounded-md border-border/50 !bg-transparent font-mono text-xs text-foreground/80"
                           aria-label={`Param value ${index + 1}`}
                           placeholder="Value"
                         />
+                      </TableCell>
+                      <TableCell className="px-3 py-2">
+                        {index < queryEntries.length && (
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              disabled={index === 0}
+                              onClick={() => moveRow(index, "up")}
+                            >
+                              <ArrowUp className="size-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              disabled={index >= queryEntries.length - 1}
+                              onClick={() => moveRow(index, "down")}
+                            >
+                              <ArrowDown className="size-3.5" />
+                            </Button>
+                          </div>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

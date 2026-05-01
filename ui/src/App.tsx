@@ -27,6 +27,7 @@ export function App() {
     timeline,
     clearTimeline,
     runSelectedRoute,
+    rerunById,
   } = useWorkspace()
 
   return (
@@ -79,6 +80,7 @@ export function App() {
                   selectedRoute={selectedRoute}
                   timeline={timeline}
                   onClearTimeline={clearTimeline}
+                  onRerun={(runId) => void rerunById(runId)}
                 />
               </ResizablePanel>
             </ResizablePanelGroup>

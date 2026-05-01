@@ -10,6 +10,7 @@ export function ResponseCard({
   selectedRoute,
   timeline,
   onClearTimeline,
+  onRerun,
 }: ResponseCardProps) {
   const [activeTab, setActiveTab] = useState("response")
   const responseText = useMemo(() => {
@@ -59,6 +60,7 @@ export function ResponseCard({
           timeline={timeline}
           selectedRoute={selectedRoute}
           onClearTimeline={onClearTimeline}
+          onRerun={onRerun}
         />
       </Tabs>
     </section>

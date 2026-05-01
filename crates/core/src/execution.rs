@@ -7,6 +7,7 @@ use std::{collections::BTreeMap, time::Instant};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunResult {
+    pub run_id: String,
     pub route_id: String,
     pub status: u16,
     pub elapsed_ms: u128,
@@ -70,6 +71,7 @@ pub async fn run_route(
     );
 
     Ok(RunResult {
+        run_id: String::new(),
         route_id: route.id.clone(),
         status,
         elapsed_ms,

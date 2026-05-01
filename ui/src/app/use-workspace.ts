@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
+  listRuns,
   getEnvironments,
   getEventsUrl,
   getRoutes,
+  rerun,
   runRoute,
   type EnvironmentConfig,
   type RunRouteOverrides,
@@ -42,9 +44,10 @@ export function useWorkspace() {
     setIsLoading(true)
     setError("")
     try {
-      const [routesData, envData] = await Promise.all([
+      const [routesData, envData, runs] = await Promise.all([
         getRoutes(),
         getEnvironments(),
+        listRuns().catch(() => []),
       ])
       setRoutes(routesData)
       setEnvironments(envData)
@@ -54,6 +57,20 @@ export function useWorkspace() {
           return current
         }
         return routesData[0]?.id ?? ""
+      })
+      setTimeline((current) => {
+        if (current.length > 0) return current
+        return runs.slice(0, 200).map((item) => ({
+          id: item.run_id,
+          runId: item.run_id,
+          routeId: item.route_id,
+          routeName: item.route_name,
+          method: item.method,
+          path: item.path,
+          statusText: `${item.status} ${item.ok ? "OK" : "Error"}`,
+          ok: item.ok,
+          createdAt: item.created_at_ms,
+        }))
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load workspace")
@@ -106,6 +123,7 @@ export function useWorkspace() {
       setTimeline((current) => [
         {
           id: crypto.randomUUID(),
+          runId: runResult.run_id,
           routeId: selectedRoute.id,
           routeName: selectedRoute.name,
           method: effectiveMethod,
@@ -147,6 +165,30 @@ export function useWorkspace() {
     }
   }, [selectedRoute, activeBaseUrl])
 
+  const rerunById = useCallback(async (runId: string) => {
+    setIsRunning(true)
+    setError("")
+    try {
+      const runResult = await rerun(runId)
+      setResult(runResult)
+      setTimeline((current) =>
+        current.map((entry) =>
+          entry.runId === runId
+            ? {
+                ...entry,
+                statusText: `${runResult.status} ${runResult.status < 400 ? "OK" : "Error"}`,
+                ok: runResult.status < 400,
+              }
+            : entry
+        )
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Re-run failed")
+    } finally {
+      setIsRunning(false)
+    }
+  }, [])
+
   const clearTimeline = useCallback(() => {
     setTimeline([])
   }, [])
@@ -172,5 +214,6 @@ export function useWorkspace() {
     timeline,
     clearTimeline,
     runSelectedRoute,
+    rerunById,
   }
 }

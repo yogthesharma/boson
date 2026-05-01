@@ -3,6 +3,7 @@ import type { RouteDefinition } from "@/api"
 
 export type TimelineEntry = {
   id: string
+  runId?: string
   routeId: string
   routeName: string
   method: string
@@ -18,4 +19,5 @@ export type ResponseCardProps = {
   selectedRoute?: RouteDefinition
   timeline: TimelineEntry[]
   onClearTimeline: () => void
+  onRerun: (runId: string) => void
 }

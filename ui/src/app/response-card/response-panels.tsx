@@ -30,6 +30,7 @@ type ResponsePanelsProps = {
   timeline: TimelineEntry[]
   selectedRoute?: RouteDefinition
   onClearTimeline: () => void
+  onRerun: (runId: string) => void
 }
 
 export function ResponsePanels(props: ResponsePanelsProps) {
@@ -40,6 +41,7 @@ export function ResponsePanels(props: ResponsePanelsProps) {
     timeline,
     selectedRoute,
     onClearTimeline,
+    onRerun,
   } = props
   const [headerFilter, setHeaderFilter] = useState("")
   const headerEntries = result
@@ -266,7 +268,20 @@ export function ResponsePanels(props: ResponsePanelsProps) {
                       </div>
                     </TableCell>
                     <TableCell className="px-3 py-2 align-middle text-xs text-muted-foreground">
-                      {formatRelativeTime(item.createdAt)}
+                      <div className="flex items-center justify-between gap-2">
+                        <span>{formatRelativeTime(item.createdAt)}</span>
+                        {item.runId && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-[11px]"
+                            onClick={() => onRerun(item.runId!)}
+                          >
+                            Re-run
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

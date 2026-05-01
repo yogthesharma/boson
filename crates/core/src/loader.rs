@@ -1,5 +1,7 @@
 use crate::schema::{EnvironmentConfig, ProjectConfig, RouteDefinition, WorkspaceSnapshot};
 use anyhow::{Context, Result};
+use jsonschema::Validator;
+use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -54,9 +56,15 @@ fn read_routes_dir(path: &Path) -> Result<Vec<RouteDefinition>> {
     collect_json_files(path, &mut files)?;
     files.sort();
 
+    let schema = route_schema_validator()?;
     let mut items = Vec::new();
     for file_path in files {
-        let mut route = read_json::<RouteDefinition>(&file_path)?;
+        let content = fs::read_to_string(&file_path)?;
+        let raw_value: Value = serde_json::from_str(&content)
+            .with_context(|| format!("invalid JSON in {}", file_path.display()))?;
+        validate_route_value(&schema, &raw_value, &file_path)?;
+        let mut route: RouteDefinition = serde_json::from_value(raw_value)
+            .with_context(|| format!("failed to parse route {}", file_path.display()))?;
         let rel = file_path
             .strip_prefix(path)
             .unwrap_or(&file_path)
@@ -66,6 +74,23 @@ fn read_routes_dir(path: &Path) -> Result<Vec<RouteDefinition>> {
         items.push(route);
     }
     Ok(items)
+}
+
+fn route_schema_validator() -> Result<Validator> {
+    let schema: Value = serde_json::from_str(include_str!("route.schema.json"))
+        .with_context(|| "invalid embedded route schema")?;
+    jsonschema::validator_for(&schema).with_context(|| "failed to compile route schema")
+}
+
+fn validate_route_value(schema: &Validator, value: &Value, file_path: &Path) -> Result<()> {
+    if let Err(error) = schema.validate(value) {
+        anyhow::bail!(
+            "route schema validation failed for {}: {}",
+            file_path.display(),
+            error
+        );
+    }
+    Ok(())
 }
 
 fn collect_json_files(path: &Path, out: &mut Vec<PathBuf>) -> Result<()> {

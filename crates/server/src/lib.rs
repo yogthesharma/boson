@@ -17,14 +17,22 @@ use boson_core::{
 };
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::BTreeMap, convert::Infallible, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    convert::Infallible,
+    net::SocketAddr,
+    path::PathBuf,
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tokio::net::TcpListener;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, RwLock};
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::warn;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -32,6 +40,19 @@ pub struct AppState {
     pub base_url: String,
     pub http_client: Client,
     pub workspace_events: broadcast::Sender<()>,
+    run_history: Arc<RwLock<VecDeque<RunHistoryItem>>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RunHistoryItem {
+    run_id: String,
+    route_id: String,
+    route_name: String,
+    method: String,
+    path: String,
+    created_at_ms: u64,
+    overrides: Option<RunRouteRequest>,
+    result: RunResult,
 }
 
 pub async fn run_local_server(root_dir: PathBuf, base_url: String, addr: SocketAddr) -> Result<()> {
@@ -43,6 +64,7 @@ pub async fn run_local_server(root_dir: PathBuf, base_url: String, addr: SocketA
         base_url,
         http_client: Client::new(),
         workspace_events,
+        run_history: Arc::new(RwLock::new(VecDeque::new())),
     });
 
     let app = Router::new()
@@ -50,6 +72,9 @@ pub async fn run_local_server(root_dir: PathBuf, base_url: String, addr: SocketA
         .route("/api/routes", get(list_routes))
         .route("/api/environments", get(list_environments))
         .route("/api/run/:route_id", post(run_route_handler))
+        .route("/api/runs", get(list_runs).post(run_with_payload_handler))
+        .route("/api/runs/:run_id", get(get_run_detail))
+        .route("/api/runs/:run_id/re-run", post(rerun_handler))
         .route("/api/events", get(events_handler))
         .route("/demo/rest/resource", any(rest_resource_handler))
         .route("/demo/rest/search", get(rest_search_handler))
@@ -82,13 +107,103 @@ async fn run_route_handler(
     State(state): State<Arc<AppState>>,
     body: Option<Json<RunRouteRequest>>,
 ) -> Result<Json<RunResult>, axum::http::StatusCode> {
-    let snapshot = read_snapshot(&state).map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    let request = body.map(|payload| payload.0);
+    let result = run_route_by_id(&state, route_id, request)
+        .await
+        .map_err(|_| axum::http::StatusCode::BAD_GATEWAY)?;
+    Ok(Json(result))
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RunWithPayloadRequest {
+    route_id: String,
+    #[serde(flatten)]
+    overrides: RunRouteRequest,
+}
+
+async fn run_with_payload_handler(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<RunWithPayloadRequest>,
+) -> Result<Json<RunResult>, axum::http::StatusCode> {
+    let result = run_route_by_id(&state, request.route_id, Some(request.overrides))
+        .await
+        .map_err(|_| axum::http::StatusCode::BAD_GATEWAY)?;
+    Ok(Json(result))
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RunSummary {
+    run_id: String,
+    route_id: String,
+    route_name: String,
+    method: String,
+    path: String,
+    created_at_ms: u64,
+    status: u16,
+    ok: bool,
+}
+
+async fn list_runs(State(state): State<Arc<AppState>>) -> Json<Vec<RunSummary>> {
+    let history = state.run_history.read().await;
+    Json(
+        history
+            .iter()
+            .map(|item| RunSummary {
+                run_id: item.run_id.clone(),
+                route_id: item.route_id.clone(),
+                route_name: item.route_name.clone(),
+                method: item.method.clone(),
+                path: item.path.clone(),
+                created_at_ms: item.created_at_ms,
+                status: item.result.status,
+                ok: item.result.status < 400,
+            })
+            .collect(),
+    )
+}
+
+async fn get_run_detail(
+    Path(run_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<RunHistoryItem>, axum::http::StatusCode> {
+    let history = state.run_history.read().await;
+    let item = history
+        .iter()
+        .find(|entry| entry.run_id == run_id)
+        .cloned()
+        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    Ok(Json(item))
+}
+
+async fn rerun_handler(
+    Path(run_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<RunResult>, axum::http::StatusCode> {
+    let history = state.run_history.read().await;
+    let item = history
+        .iter()
+        .find(|entry| entry.run_id == run_id)
+        .cloned()
+        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    drop(history);
+    let result = run_route_by_id(&state, item.route_id, item.overrides)
+        .await
+        .map_err(|_| axum::http::StatusCode::BAD_GATEWAY)?;
+    Ok(Json(result))
+}
+
+async fn run_route_by_id(
+    state: &Arc<AppState>,
+    route_id: String,
+    request: Option<RunRouteRequest>,
+) -> Result<RunResult> {
+    let snapshot = read_snapshot(&state)?;
     let route = snapshot
         .routes
         .iter()
         .find(|item| item.id == route_id)
-        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
-    let route = if let Some(Json(request)) = body {
+        .ok_or_else(|| anyhow::anyhow!("route not found: {}", route_id))?;
+    let route = if let Some(request) = request.clone() {
         apply_run_overrides(route, request)
     } else {
         route.clone()
@@ -99,7 +214,7 @@ async fn run_route_handler(
         .iter()
         .find(|item| item.name == snapshot.project.default_environment)
         .or_else(|| snapshot.environments.first())
-        .ok_or(axum::http::StatusCode::BAD_REQUEST)?;
+        .ok_or_else(|| anyhow::anyhow!("no environment configured"))?;
 
     let base_url = env
         .variables
@@ -108,13 +223,33 @@ async fn run_route_handler(
         .map(String::as_str)
         .unwrap_or(&state.base_url);
 
-    let result = run_route(&state.http_client, base_url, &route, env)
-        .await
-        .map_err(|_| axum::http::StatusCode::BAD_GATEWAY)?;
-    Ok(Json(result))
+    let mut result = run_route(&state.http_client, base_url, &route, env).await?;
+    let run_id = Uuid::new_v4().to_string();
+    result.run_id = run_id.clone();
+
+    let created_at_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or_default();
+    let item = RunHistoryItem {
+        run_id,
+        route_id: route.id.clone(),
+        route_name: route.name.clone(),
+        method: route.method.clone(),
+        path: route.path.clone(),
+        created_at_ms,
+        overrides: request,
+        result: result.clone(),
+    };
+    let mut history = state.run_history.write().await;
+    history.push_front(item);
+    while history.len() > 300 {
+        history.pop_back();
+    }
+    Ok(result)
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct RunRouteRequest {
     #[serde(default)]
     method: Option<String>,
@@ -132,7 +267,7 @@ struct RunRouteRequest {
     vars: Option<Vec<RouteVar>>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct RunAuthConfig {
     #[serde(default)]
     r#type: Option<String>,
@@ -144,7 +279,7 @@ struct RunAuthConfig {
     api_key: Option<RunApiKeyAuth>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct RunBasicAuth {
     #[serde(default)]
     username: Option<String>,
@@ -152,13 +287,13 @@ struct RunBasicAuth {
     password: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct RunBearerAuth {
     #[serde(default)]
     token: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct RunApiKeyAuth {
     #[serde(default)]
     key: Option<String>,
