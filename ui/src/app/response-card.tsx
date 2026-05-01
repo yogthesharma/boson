@@ -40,7 +40,7 @@ export function ResponseCard({
   }
 
   return (
-    <section className="h-full p-4 text-sm">
+    <section className="h-full text-sm">
       <Tabs
         value={activeTab}
         onValueChange={setActiveTab}

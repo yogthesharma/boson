@@ -60,38 +60,46 @@ export function ResponsePanels(props: ResponsePanelsProps) {
 
   return (
     <>
-      <TabsContent value="response" className="mt-1.5 flex-1 overflow-hidden">
-        {!result && !isRunning && (
-          <Empty className="h-full border-muted/50 bg-muted/10">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <Lightning className="size-4" />
-              </EmptyMedia>
-              <EmptyTitle>No response yet</EmptyTitle>
-              <EmptyDescription>
-                Run the selected route to inspect response status, payload, and
-                test results.
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        )}
-        {isRunning && (
-          <div className="space-y-3">
-            <Skeleton className="h-4 w-36" />
-            <Skeleton className="h-4 w-28" />
-            <Skeleton className="h-36 w-full" />
-          </div>
-        )}
-        {result && (
-          <div className="h-full overflow-auto rounded-md">
-            <JsonCodeView content={responseText} />
-          </div>
-        )}
+      <TabsContent
+        value="response"
+        className="mt-1 flex min-h-0 flex-1 px-2 pb-2"
+      >
+        <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-md">
+          {!result && !isRunning && (
+            <Empty className="h-full border-0 bg-muted/10">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Lightning className="size-4" />
+                </EmptyMedia>
+                <EmptyTitle>No response yet</EmptyTitle>
+                <EmptyDescription>
+                  Run the selected route to inspect response status, payload,
+                  and test results.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          )}
+          {isRunning && (
+            <div className="space-y-3 p-3">
+              <Skeleton className="h-4 w-36" />
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-36 w-full" />
+            </div>
+          )}
+          {result && (
+            <div className="h-full overflow-auto rounded-md">
+              <JsonCodeView content={responseText} />
+            </div>
+          )}
+        </div>
       </TabsContent>
 
-      <TabsContent value="headers" className="flex min-h-0 flex-1">
-        <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
-          <div className="grid grid-cols-2 border-b border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+      <TabsContent
+        value="headers"
+        className="mt-1 flex min-h-0 flex-1 px-2 pb-2"
+      >
+        <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-md px-2">
+          <div className="grid grid-cols-2 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             <div className="flex items-center gap-2">
               <span>Header</span>
               <Input
@@ -150,7 +158,7 @@ export function ResponsePanels(props: ResponsePanelsProps) {
               filteredHeaderEntries.map(([name, value]) => (
                 <div
                   key={name}
-                  className="grid grid-cols-2 border-b border-border/60 px-3 py-2 text-sm last:border-b"
+                  className="grid grid-cols-2 px-3 py-2 text-sm odd:bg-muted/10 even:bg-background hover:bg-muted/20"
                 >
                   <span className="font-medium break-all text-foreground/90">
                     {name}
@@ -162,9 +170,12 @@ export function ResponsePanels(props: ResponsePanelsProps) {
         </div>
       </TabsContent>
 
-      <TabsContent value="timeline" className="flex min-h-0 flex-1">
-        <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
-          <div className="grid grid-cols-2 border-b border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+      <TabsContent
+        value="timeline"
+        className="mt-1 flex min-h-0 flex-1 px-2 pb-2"
+      >
+        <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-md px-2">
+          <div className="grid grid-cols-2 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             <span>Event</span>
             <div className="flex items-center justify-between">
               <span>Time</span>
@@ -189,7 +200,7 @@ export function ResponsePanels(props: ResponsePanelsProps) {
             {timeline.map((item) => (
               <div
                 key={item.id}
-                className="grid grid-cols-2 gap-3 border-b border-border/60 px-3 py-2 text-sm last:border-b"
+                className="grid grid-cols-2 gap-3 px-3 py-2 text-sm odd:bg-muted/10 even:bg-background hover:bg-muted/20"
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -225,9 +236,9 @@ export function ResponsePanels(props: ResponsePanelsProps) {
         </div>
       </TabsContent>
 
-      <TabsContent value="tests" className="flex min-h-0 flex-1">
-        <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
-          <div className="grid grid-cols-2 border-b border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+      <TabsContent value="tests" className="mt-1 flex min-h-0 flex-1 px-2 pb-2">
+        <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-md px-2">
+          <div className="grid grid-cols-2 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             <span>Assertion</span>
             <span>Result</span>
           </div>
@@ -253,7 +264,7 @@ export function ResponsePanels(props: ResponsePanelsProps) {
               result.test_results.map((test, index) => (
                 <div
                   key={`${index}-${test.message}`}
-                  className="grid grid-cols-2 gap-3 border-b border-border/60 px-3 py-2 text-sm last:border-b"
+                  className="grid grid-cols-2 gap-3 px-3 py-2 text-sm odd:bg-muted/10 even:bg-background hover:bg-muted/20"
                 >
                   <span className="break-words text-foreground/90">
                     {test.message}

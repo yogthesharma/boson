@@ -9,9 +9,9 @@ type TestsPanelProps = {
 
 export function TestsPanel({ tests }: TestsPanelProps) {
   return (
-    <TabsContent value="tests" className="mt-1 flex min-h-0 flex-1">
-      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
-        <div className="grid grid-cols-2 border-b border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+    <TabsContent value="tests" className="mt-1 flex min-h-0 flex-1 px-2 pb-2">
+      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-md">
+        <div className="grid grid-cols-2 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           <span>Assertion</span>
           <span>Type</span>
         </div>
@@ -24,7 +24,7 @@ export function TestsPanel({ tests }: TestsPanelProps) {
           {tests.map((test, index) => (
             <div
               key={index}
-              className="grid grid-cols-2 gap-3 border-b border-border/60 px-3 py-2 text-sm last:border-b"
+              className="grid grid-cols-2 gap-3 px-3 py-2 text-sm odd:bg-muted/10 even:bg-background hover:bg-muted/20"
             >
               <span className="text-foreground/90">{describeTest(test)}</span>
               <div>

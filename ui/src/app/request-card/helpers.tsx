@@ -75,3 +75,19 @@ export function extractQueryEntries(path: string): Array<[string, string]> {
       ]
     })
 }
+
+export function updateQueryEntriesInPath(
+  path: string,
+  entries: Array<[string, string]>
+): string {
+  const [base] = path.split("?")
+  if (entries.length === 0) return base
+  const query = entries
+    .map(([key, value]) => {
+      const encodedKey = encodeURIComponent(key)
+      const encodedValue = encodeURIComponent(value)
+      return `${encodedKey}=${encodedValue}`
+    })
+    .join("&")
+  return `${base}?${query}`
+}
