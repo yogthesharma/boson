@@ -5,6 +5,14 @@ import { Input } from "@/components/ui/input"
 import { useTheme } from "@/components/theme-provider"
 import { Info } from "@phosphor-icons/react"
 import { Button } from "@/components/ui/button"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 
 type ParamsPanelProps = {
   queryEntries: Array<[string, string]>
@@ -119,36 +127,50 @@ export function ParamsPanel({
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-md">
         {mode === "table" ? (
           <>
-            <div className="grid grid-cols-2 items-center bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-              <span>Name</span>
-              <span>Value</span>
-            </div>
             <div className="min-h-0 flex-1 overflow-auto">
-              {displayedEntries.map(([key, value], index) => (
-                <div
-                  key={`param-row-${index}`}
-                  className="grid grid-cols-2 items-center px-3 py-2 text-sm odd:bg-muted/10 even:bg-background hover:bg-muted/20"
-                >
-                  <Input
-                    value={key}
-                    onChange={(event) =>
-                      onRowChange(index, "key", event.target.value)
-                    }
-                    className="h-7 rounded-md border-border/50 !bg-transparent font-mono text-xs text-foreground/90"
-                    aria-label={`Param name ${index + 1}`}
-                    placeholder="Name"
-                  />
-                  <Input
-                    value={value}
-                    onChange={(event) =>
-                      onRowChange(index, "value", event.target.value)
-                    }
-                    className="h-7 rounded-md border-border/50 !bg-transparent font-mono text-xs text-foreground/80"
-                    aria-label={`Param value ${index + 1}`}
-                    placeholder="Value"
-                  />
-                </div>
-              ))}
+              <Table>
+                <TableHeader className="[&_tr]:border-0">
+                  <TableRow className="border-0 bg-muted/30 hover:bg-muted/30">
+                    <TableHead className="h-auto px-3 py-2 text-xs text-muted-foreground">
+                      Name
+                    </TableHead>
+                    <TableHead className="h-auto px-3 py-2 text-xs text-muted-foreground">
+                      Value
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="[&_tr:last-child]:border-0">
+                  {displayedEntries.map(([key, value], index) => (
+                    <TableRow
+                      key={`param-row-${index}`}
+                      className="border-0 odd:bg-muted/10 even:bg-background hover:bg-muted/20"
+                    >
+                      <TableCell className="px-3 py-2">
+                        <Input
+                          value={key}
+                          onChange={(event) =>
+                            onRowChange(index, "key", event.target.value)
+                          }
+                          className="h-7 rounded-md border-border/50 !bg-transparent font-mono text-xs text-foreground/90"
+                          aria-label={`Param name ${index + 1}`}
+                          placeholder="Name"
+                        />
+                      </TableCell>
+                      <TableCell className="px-3 py-2">
+                        <Input
+                          value={value}
+                          onChange={(event) =>
+                            onRowChange(index, "value", event.target.value)
+                          }
+                          className="h-7 rounded-md border-border/50 !bg-transparent font-mono text-xs text-foreground/80"
+                          aria-label={`Param value ${index + 1}`}
+                          placeholder="Value"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           </>
         ) : (

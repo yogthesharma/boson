@@ -40,11 +40,11 @@ export function ResponseCard({
   }
 
   return (
-    <section className="h-full text-sm">
+    <section className="flex h-full min-h-0 flex-col text-sm">
       <Tabs
         value={activeTab}
         onValueChange={setActiveTab}
-        className="flex h-full flex-col"
+        className="flex h-full min-h-0 flex-1 flex-col"
       >
         <ResponseToolbar
           result={result}

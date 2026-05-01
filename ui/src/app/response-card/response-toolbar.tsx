@@ -18,7 +18,7 @@ export function ResponseToolbar(props: ResponseToolbarProps) {
   const totalTests = result?.test_results.length ?? 0
 
   return (
-    <div className="flex items-center justify-between gap-3 px-2 pt-1">
+    <div className="mt-1 flex items-center justify-between gap-3 px-2 pt-1">
       <TabsList
         variant="line"
         className="mr-4 ml-1 h-auto w-fit justify-start border-none p-0"
