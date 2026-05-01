@@ -8,6 +8,7 @@ Boson is a repo-native API workspace where `.api/` JSON files are the source of 
 - Rich request editing in UI with local draft overrides (no accidental file writes).
 - Run history behaves like first-class platform runs with `run_id`, detail lookup, and rerun.
 - Route config is schema-validated on load for safer onboarding and fewer runtime surprises.
+- Environment switching is UI-driven, but environment definitions remain config-authored.
 
 ## Project Structure
 
@@ -37,6 +38,8 @@ This starts:
 - `POST /api/runs/:run_id/re-run` - rerun using the same stored payload
 - `GET /api/events` - SSE stream for workspace changes
 
+Environment CRUD endpoints are intentionally not exposed. Edit `.api/environments/*.json` directly and let watcher/SSE reload changes into the UI.
+
 ## Route Schema and Validation
 
 Route files are validated against the embedded JSON schema at load time.
@@ -53,6 +56,16 @@ Validation failures include the offending route file path to speed up fixes.
 - Auth, vars, scripts, docs, file, and settings tabs (config-first defaults)
 - Response inspection tabs for payload, headers, timeline, and tests
 - Run timeline with rerun action backed by server-side run history
+- Environment selector in UI with config-first source of truth (`.api/environments/*.json`)
+- Runtime `{{var}}` substitution across path, headers, and body flows
+- Missing environment variable warning in request bar before run
+
+## Environment Model
+
+- Source of truth: `.api/environments/*.json`
+- UI responsibility: select active environment and preview run behavior
+- File edits auto-sync into UI via watcher + SSE
+- Secrets can be represented in environment config using `secret_keys`; UI treats env values as config data, not mutable state
 
 ## Status
 
