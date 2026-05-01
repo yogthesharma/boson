@@ -37,12 +37,22 @@ type RequestDraftMap = Record<string, RequestTabState>
 
 type RequestPreviewCardProps = {
   selectedRoute?: RouteDefinition
+  activeEnvironment: string
+  activeBaseUrl: string
+  activeEnvironmentVariables: Record<string, string>
   isRunning: boolean
   onRun: (overrides?: RunRouteOverrides) => void
 }
 
 export function RequestPreviewCard(props: RequestPreviewCardProps) {
-  const { selectedRoute, isRunning, onRun } = props
+  const {
+    selectedRoute,
+    activeEnvironment,
+    activeBaseUrl,
+    activeEnvironmentVariables,
+    isRunning,
+    onRun,
+  } = props
   const [draftsByRoute, setDraftsByRoute] = useState<RequestDraftMap>(() => {
     if (typeof window === "undefined") return {}
     try {
@@ -219,6 +229,43 @@ export function RequestPreviewCard(props: RequestPreviewCardProps) {
     return toStateFingerprint(defaultState) !== toStateFingerprint(currentState)
   }, [currentState, defaultState])
 
+  const missingVariables = useMemo(() => {
+    if (!currentState) return []
+    const tokenPattern = /\{\{([^}]+)\}\}/g
+    const known = new Set(Object.keys(activeEnvironmentVariables))
+    const required = new Set<string>()
+    const collect = (source: string) => {
+      let match = tokenPattern.exec(source)
+      while (match) {
+        const key = match[1]?.trim()
+        if (key) required.add(key)
+        match = tokenPattern.exec(source)
+      }
+      tokenPattern.lastIndex = 0
+    }
+    collect(currentState.url)
+    for (const [key, value] of currentState.headers) {
+      collect(key)
+      collect(value)
+    }
+    collect(currentState.bodyText)
+    for (const [key, value] of currentState.bodyFormEntries) {
+      collect(key)
+      collect(value)
+    }
+    for (const item of currentState.bodyMultipartEntries) {
+      collect(item.key)
+      collect(item.value ?? "")
+      collect(item.fileName ?? "")
+    }
+    collect(currentState.bodyBinaryPath)
+    for (const item of currentState.vars) {
+      collect(item.key)
+      collect(item.value)
+    }
+    return Array.from(required).filter((key) => !known.has(key)).sort()
+  }, [activeEnvironmentVariables, currentState])
+
   return (
     <section className="flex h-full min-h-0 flex-col gap-3 overflow-hidden pb-2">
       {!selectedRoute && (
@@ -232,6 +279,9 @@ export function RequestPreviewCard(props: RequestPreviewCardProps) {
                 currentState?.method ?? selectedRoute.method.toUpperCase()
               }
               requestUrl={currentState?.url ?? selectedRoute.path}
+              activeEnvironment={activeEnvironment}
+              activeBaseUrl={activeBaseUrl}
+              missingVariables={missingVariables}
               hasDraftChanges={hasDraftChanges}
               onMethodChange={(value) => {
                 if (!currentState) return

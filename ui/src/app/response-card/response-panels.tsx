@@ -257,6 +257,11 @@ export function ResponsePanels(props: ResponsePanelsProps) {
                           <span className="text-xs font-semibold tracking-wide text-emerald-400/90">
                             {item.method}
                           </span>
+                          {item.environmentName && (
+                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                              {item.environmentName}
+                            </span>
+                          )}
                           <span className="truncate text-foreground/90">{item.path}</span>
                         </div>
                         <div className="truncate text-xs text-muted-foreground">

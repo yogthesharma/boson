@@ -1,7 +1,7 @@
 use anyhow::Result;
 use axum::{
     body::Bytes,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, HeaderValue, Method, StatusCode},
     response::{
         sse::{Event, KeepAlive, Sse},
@@ -22,6 +22,7 @@ use serde_json::Value;
 use std::{
     collections::{BTreeMap, VecDeque},
     convert::Infallible,
+    fs,
     net::SocketAddr,
     path::PathBuf,
     sync::Arc,
@@ -50,6 +51,7 @@ struct RunHistoryItem {
     route_name: String,
     method: String,
     path: String,
+    environment_name: String,
     created_at_ms: u64,
     overrides: Option<RunRouteRequest>,
     result: RunResult,
@@ -70,7 +72,11 @@ pub async fn run_local_server(root_dir: PathBuf, base_url: String, addr: SocketA
     let app = Router::new()
         .route("/health", get(health))
         .route("/api/routes", get(list_routes))
-        .route("/api/environments", get(list_environments))
+        .route("/api/environments", get(list_environments).post(create_environment))
+        .route(
+            "/api/environments/:name",
+            axum::routing::put(update_environment).delete(delete_environment),
+        )
         .route("/api/run/:route_id", post(run_route_handler))
         .route("/api/runs", get(list_runs).post(run_with_payload_handler))
         .route("/api/runs/:run_id", get(get_run_detail))
@@ -102,21 +108,62 @@ async fn list_environments(State(state): State<Arc<AppState>>) -> Json<Vec<Envir
     Json(snapshot.environments)
 }
 
+async fn create_environment(
+    State(state): State<Arc<AppState>>,
+    Json(environment): Json<EnvironmentConfig>,
+) -> Result<Json<EnvironmentConfig>, axum::http::StatusCode> {
+    write_environment_file(&state.root_dir, &environment, None)
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    let _ = state.workspace_events.send(());
+    Ok(Json(environment))
+}
+
+async fn update_environment(
+    Path(name): Path<String>,
+    State(state): State<Arc<AppState>>,
+    Json(environment): Json<EnvironmentConfig>,
+) -> Result<Json<EnvironmentConfig>, axum::http::StatusCode> {
+    write_environment_file(&state.root_dir, &environment, Some(name))
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    let _ = state.workspace_events.send(());
+    Ok(Json(environment))
+}
+
+async fn delete_environment(
+    Path(name): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<StatusCode, axum::http::StatusCode> {
+    let path = find_environment_file(&state.root_dir, &name)
+        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    fs::remove_file(path).map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    let _ = state.workspace_events.send(());
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn run_route_handler(
     Path(route_id): Path<String>,
+    Query(query): Query<RunRouteQuery>,
     State(state): State<Arc<AppState>>,
     body: Option<Json<RunRouteRequest>>,
 ) -> Result<Json<RunResult>, axum::http::StatusCode> {
     let request = body.map(|payload| payload.0);
-    let result = run_route_by_id(&state, route_id, request)
+    let result = run_route_by_id(&state, route_id, request, query.environment)
         .await
         .map_err(|_| axum::http::StatusCode::BAD_GATEWAY)?;
     Ok(Json(result))
 }
 
 #[derive(Debug, Clone, Deserialize)]
+struct RunRouteQuery {
+    #[serde(default)]
+    environment: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 struct RunWithPayloadRequest {
     route_id: String,
+    #[serde(default)]
+    environment: Option<String>,
     #[serde(flatten)]
     overrides: RunRouteRequest,
 }
@@ -125,7 +172,12 @@ async fn run_with_payload_handler(
     State(state): State<Arc<AppState>>,
     Json(request): Json<RunWithPayloadRequest>,
 ) -> Result<Json<RunResult>, axum::http::StatusCode> {
-    let result = run_route_by_id(&state, request.route_id, Some(request.overrides))
+    let result = run_route_by_id(
+        &state,
+        request.route_id,
+        Some(request.overrides),
+        request.environment,
+    )
         .await
         .map_err(|_| axum::http::StatusCode::BAD_GATEWAY)?;
     Ok(Json(result))
@@ -138,6 +190,7 @@ struct RunSummary {
     route_name: String,
     method: String,
     path: String,
+    environment_name: String,
     created_at_ms: u64,
     status: u16,
     ok: bool,
@@ -154,6 +207,7 @@ async fn list_runs(State(state): State<Arc<AppState>>) -> Json<Vec<RunSummary>> 
                 route_name: item.route_name.clone(),
                 method: item.method.clone(),
                 path: item.path.clone(),
+                environment_name: item.environment_name.clone(),
                 created_at_ms: item.created_at_ms,
                 status: item.result.status,
                 ok: item.result.status < 400,
@@ -175,27 +229,11 @@ async fn get_run_detail(
     Ok(Json(item))
 }
 
-async fn rerun_handler(
-    Path(run_id): Path<String>,
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<RunResult>, axum::http::StatusCode> {
-    let history = state.run_history.read().await;
-    let item = history
-        .iter()
-        .find(|entry| entry.run_id == run_id)
-        .cloned()
-        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
-    drop(history);
-    let result = run_route_by_id(&state, item.route_id, item.overrides)
-        .await
-        .map_err(|_| axum::http::StatusCode::BAD_GATEWAY)?;
-    Ok(Json(result))
-}
-
 async fn run_route_by_id(
     state: &Arc<AppState>,
     route_id: String,
     request: Option<RunRouteRequest>,
+    environment_name: Option<String>,
 ) -> Result<RunResult> {
     let snapshot = read_snapshot(&state)?;
     let route = snapshot
@@ -209,10 +247,15 @@ async fn run_route_by_id(
         route.clone()
     };
 
-    let env = snapshot
-        .environments
-        .iter()
-        .find(|item| item.name == snapshot.project.default_environment)
+    let env = environment_name
+        .as_deref()
+        .and_then(|name| snapshot.environments.iter().find(|item| item.name == name))
+        .or_else(|| {
+            snapshot
+                .environments
+                .iter()
+                .find(|item| item.name == snapshot.project.default_environment)
+        })
         .or_else(|| snapshot.environments.first())
         .ok_or_else(|| anyhow::anyhow!("no environment configured"))?;
 
@@ -237,6 +280,7 @@ async fn run_route_by_id(
         route_name: route.name.clone(),
         method: route.method.clone(),
         path: route.path.clone(),
+        environment_name: env.name.clone(),
         created_at_ms,
         overrides: request,
         result: result.clone(),
@@ -247,6 +291,28 @@ async fn run_route_by_id(
         history.pop_back();
     }
     Ok(result)
+}
+
+async fn rerun_handler(
+    Path(run_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<RunResult>, axum::http::StatusCode> {
+    let history = state.run_history.read().await;
+    let item = history
+        .iter()
+        .find(|entry| entry.run_id == run_id)
+        .cloned()
+        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    drop(history);
+    let result = run_route_by_id(
+        &state,
+        item.route_id,
+        item.overrides,
+        Some(item.environment_name),
+    )
+        .await
+        .map_err(|_| axum::http::StatusCode::BAD_GATEWAY)?;
+    Ok(Json(result))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -560,4 +626,61 @@ fn is_relevant_fs_event(kind: &EventKind) -> bool {
         kind,
         EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) | EventKind::Any
     )
+}
+
+fn environment_dir(root: &PathBuf) -> PathBuf {
+    root.join(".api").join("environments")
+}
+
+fn find_environment_file(root: &PathBuf, name: &str) -> Option<PathBuf> {
+    let dir = environment_dir(root);
+    if !dir.exists() {
+        return None;
+    }
+    let entries = fs::read_dir(&dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let Ok(content) = fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(env) = serde_json::from_str::<EnvironmentConfig>(&content) else {
+            continue;
+        };
+        if env.name == name {
+            return Some(path);
+        }
+    }
+    None
+}
+
+fn write_environment_file(
+    root: &PathBuf,
+    environment: &EnvironmentConfig,
+    previous_name: Option<String>,
+) -> Result<()> {
+    let dir = environment_dir(root);
+    fs::create_dir_all(&dir)?;
+    if let Some(previous) = previous_name {
+        if previous != environment.name {
+            if let Some(old_file) = find_environment_file(root, &previous) {
+                let _ = fs::remove_file(old_file);
+            }
+        }
+    }
+
+    let target_file = find_environment_file(root, &environment.name).unwrap_or_else(|| {
+        let safe = environment
+            .name
+            .to_lowercase()
+            .chars()
+            .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
+            .collect::<String>();
+        dir.join(format!("{}.json", safe.trim_matches('-')))
+    });
+    let content = serde_json::to_string_pretty(environment)?;
+    fs::write(target_file, format!("{}\n", content))?;
+    Ok(())
 }

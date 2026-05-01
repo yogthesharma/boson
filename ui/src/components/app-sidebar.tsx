@@ -37,7 +37,6 @@ type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   selectedRouteId?: string
   onSelectRoute: (routeId: string) => void
   lastRunByRoute: Record<string, RouteStatus>
-  activeEnvironment: string
   isLoading: boolean
   syncToken: number
 }
@@ -47,7 +46,6 @@ export function AppSidebar({
   selectedRouteId,
   onSelectRoute,
   lastRunByRoute,
-  activeEnvironment,
   isLoading,
   syncToken,
   ...props

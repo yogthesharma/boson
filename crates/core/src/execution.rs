@@ -27,8 +27,9 @@ pub async fn run_route(
     client: &Client,
     base_url: &str,
     route: &RouteDefinition,
-    _environment: &EnvironmentConfig,
+    environment: &EnvironmentConfig,
 ) -> Result<RunResult> {
+    let route = apply_environment_variables_to_route(route, environment);
     let url = if route.path.starts_with("http://") || route.path.starts_with("https://") {
         route.path.clone()
     } else {
@@ -41,7 +42,7 @@ pub async fn run_route(
         request = request.header(k, v);
     }
 
-    if let Some(override_body) = resolve_special_body_from_override(route)? {
+    if let Some(override_body) = resolve_special_body_from_override(&route)? {
         match override_body {
             ResolvedSpecialBody::Binary { bytes } => {
                 request = request.body(bytes);
@@ -50,7 +51,7 @@ pub async fn run_route(
                 request = request.multipart(form);
             }
         }
-    } else if let Some(config_file_body) = resolve_special_body_from_file_config(route)? {
+    } else if let Some(config_file_body) = resolve_special_body_from_file_config(&route)? {
         match config_file_body {
             ResolvedSpecialBody::Binary { bytes } => {
                 request = request.body(bytes);
@@ -129,6 +130,87 @@ pub async fn run_route(
         response_body,
         test_results,
     })
+}
+
+fn apply_environment_variables_to_route(
+    route: &RouteDefinition,
+    environment: &EnvironmentConfig,
+) -> RouteDefinition {
+    let mut next = route.clone();
+    next.path = replace_tokens(&next.path, &environment.variables);
+    next.headers = next
+        .headers
+        .iter()
+        .map(|(key, value)| {
+            (
+                replace_tokens(key, &environment.variables),
+                replace_tokens(value, &environment.variables),
+            )
+        })
+        .collect();
+
+    if let Some(body) = &mut next.body {
+        replace_json_tokens_with_map(body, &environment.variables);
+    }
+    if let Some(file) = &mut next.file {
+        if let Some(path) = &mut file.path {
+            *path = replace_tokens(path, &environment.variables);
+        }
+        for field in &mut file.multipart {
+            field.key = replace_tokens(&field.key, &environment.variables);
+            if let Some(value) = &mut field.value {
+                *value = replace_tokens(value, &environment.variables);
+            }
+        }
+    }
+    if let Some(body_config) = &mut next.body_config {
+        if let Some(raw) = &mut body_config.raw {
+            *raw = replace_tokens(raw, &environment.variables);
+        }
+        if let Some(binary_path) = &mut body_config.binary_path {
+            *binary_path = replace_tokens(binary_path, &environment.variables);
+        }
+        for entry in &mut body_config.form_entries {
+            entry.key = replace_tokens(&entry.key, &environment.variables);
+            if let Some(value) = &mut entry.value {
+                *value = replace_tokens(value, &environment.variables);
+            }
+        }
+        for entry in &mut body_config.multipart_entries {
+            entry.key = replace_tokens(&entry.key, &environment.variables);
+            if let Some(value) = &mut entry.value {
+                *value = replace_tokens(value, &environment.variables);
+            }
+        }
+    }
+    next
+}
+
+fn replace_tokens(source: &str, values: &BTreeMap<String, String>) -> String {
+    let mut output = source.to_string();
+    for (key, value) in values {
+        output = output.replace(&format!("{{{{{}}}}}", key), value);
+    }
+    output
+}
+
+fn replace_json_tokens_with_map(value: &mut Value, values: &BTreeMap<String, String>) {
+    match value {
+        Value::String(current) => {
+            *current = replace_tokens(current, values);
+        }
+        Value::Array(items) => {
+            for item in items {
+                replace_json_tokens_with_map(item, values);
+            }
+        }
+        Value::Object(map) => {
+            for item in map.values_mut() {
+                replace_json_tokens_with_map(item, values);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn evaluate_tests(
@@ -450,7 +532,7 @@ fn resolve_special_body_from_file_config(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schema::{RouteFileConfig, RouteMultipartField};
+    use crate::schema::{RouteBodyConfig, RouteBodyEntry, RouteFileConfig, RouteMultipartField};
 
     fn base_route() -> RouteDefinition {
         RouteDefinition {
@@ -531,5 +613,86 @@ mod tests {
         });
         let resolved = resolve_special_body_from_file_config(&route).expect("resolve");
         assert!(matches!(resolved, Some(ResolvedSpecialBody::Multipart { .. })));
+    }
+
+    #[test]
+    fn applies_environment_tokens_to_route_fields() {
+        let mut route = base_route();
+        route.path = "/users/{{tenant}}/items?cursor={{cursor}}".to_string();
+        route.headers.insert("x-tenant".to_string(), "{{tenant}}".to_string());
+        route.body = Some(serde_json::json!({
+            "tenant": "{{tenant}}",
+            "nested": { "cursor": "{{cursor}}" }
+        }));
+        route.body_config = Some(RouteBodyConfig {
+            mode: Some("form_urlencoded".to_string()),
+            raw: Some("q={{tenant}}".to_string()),
+            form_entries: vec![RouteBodyEntry {
+                key: "tenant".to_string(),
+                value: Some("{{tenant}}".to_string()),
+            }],
+            multipart_entries: vec![RouteMultipartField {
+                key: "meta".to_string(),
+                value: Some("{{cursor}}".to_string()),
+                r#type: Some("text".to_string()),
+            }],
+            binary_path: Some("/tmp/{{tenant}}.bin".to_string()),
+        });
+
+        let environment = EnvironmentConfig {
+            name: "dev".to_string(),
+            variables: BTreeMap::from([
+                ("tenant".to_string(), "acme".to_string()),
+                ("cursor".to_string(), "abc".to_string()),
+            ]),
+            secret_keys: vec![],
+        };
+
+        let resolved = apply_environment_variables_to_route(&route, &environment);
+        assert!(resolved.path.contains("/users/acme/items"));
+        assert_eq!(
+            resolved.headers.get("x-tenant").cloned().unwrap_or_default(),
+            "acme"
+        );
+        assert_eq!(
+            resolved
+                .body
+                .as_ref()
+                .and_then(|body| body.get("tenant"))
+                .and_then(Value::as_str)
+                .unwrap_or_default(),
+            "acme"
+        );
+        assert_eq!(
+            resolved
+                .body_config
+                .as_ref()
+                .and_then(|config| config.form_entries.first())
+                .and_then(|entry| entry.value.as_deref())
+                .unwrap_or_default(),
+            "acme"
+        );
+    }
+
+    #[test]
+    fn switches_values_between_environments() {
+        let mut route = base_route();
+        route.path = "/users/{{tenant}}".to_string();
+
+        let env_a = EnvironmentConfig {
+            name: "dev".to_string(),
+            variables: BTreeMap::from([("tenant".to_string(), "team-a".to_string())]),
+            secret_keys: vec![],
+        };
+        let env_b = EnvironmentConfig {
+            name: "staging".to_string(),
+            variables: BTreeMap::from([("tenant".to_string(), "team-b".to_string())]),
+            secret_keys: vec![],
+        };
+
+        let route_a = apply_environment_variables_to_route(&route, &env_a);
+        let route_b = apply_environment_variables_to_route(&route, &env_b);
+        assert_eq!(route_a.path, "/users/team-a");
+        assert_eq!(route_b.path, "/users/team-b");
     }
 }

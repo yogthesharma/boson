@@ -6,6 +6,7 @@ export type TimelineEntry = {
   runId?: string
   routeId: string
   routeName: string
+  environmentName?: string
   method: string
   path: string
   statusText: string

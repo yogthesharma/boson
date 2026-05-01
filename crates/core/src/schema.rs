@@ -14,6 +14,8 @@ pub struct EnvironmentConfig {
     pub name: String,
     #[serde(default)]
     pub variables: BTreeMap<String, String>,
+    #[serde(default)]
+    pub secret_keys: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -68,6 +68,7 @@ export type RunRouteOverrides = {
 export type EnvironmentConfig = {
   name: string
   variables: Record<string, string>
+  secret_keys?: string[]
 }
 
 export type RunResult = {
@@ -86,6 +87,7 @@ export type RunHistorySummary = {
   route_name: string
   method: string
   path: string
+  environment_name: string
   created_at_ms: number
   status: number
   ok: boolean
@@ -121,11 +123,52 @@ export function getEnvironments(): Promise<EnvironmentConfig[]> {
   return readJson<EnvironmentConfig[]>(`${API_BASE}/api/environments`)
 }
 
+export function createEnvironment(payload: EnvironmentConfig): Promise<EnvironmentConfig> {
+  return readJson<EnvironmentConfig>(`${API_BASE}/api/environments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateEnvironment(
+  name: string,
+  payload: EnvironmentConfig
+): Promise<EnvironmentConfig> {
+  return readJson<EnvironmentConfig>(
+    `${API_BASE}/api/environments/${encodeURIComponent(name)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  )
+}
+
+export async function deleteEnvironment(name: string): Promise<void> {
+  const response = await fetch(
+    `${API_BASE}/api/environments/${encodeURIComponent(name)}`,
+    {
+      method: "DELETE",
+    }
+  )
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`)
+  }
+}
+
 export function runRoute(
   routeId: string,
-  overrides?: RunRouteOverrides
+  overrides?: RunRouteOverrides,
+  environmentName?: string
 ): Promise<RunResult> {
-  return readJson<RunResult>(`${API_BASE}/api/run/${routeId}`, {
+  const searchParams = new URLSearchParams()
+  if (environmentName?.trim()) {
+    searchParams.set("environment", environmentName.trim())
+  }
+  const suffix = searchParams.toString()
+  const url = `${API_BASE}/api/run/${routeId}${suffix ? `?${suffix}` : ""}`
+  return readJson<RunResult>(url, {
     method: "POST",
     headers: overrides ? { "Content-Type": "application/json" } : undefined,
     body: overrides ? JSON.stringify(overrides) : undefined,

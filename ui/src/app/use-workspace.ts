@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
+  createEnvironment,
+  deleteEnvironment,
   listRuns,
   getEnvironments,
   getEventsUrl,
   getRoutes,
   rerun,
   runRoute,
+  updateEnvironment,
   type EnvironmentConfig,
   type RunRouteOverrides,
   type RouteDefinition,
@@ -14,10 +17,15 @@ import {
 import type { TimelineEntry } from "@/app/response-card/types"
 
 const TIMELINE_STORAGE_KEY = "boson.response.timeline.v1"
+const ACTIVE_ENVIRONMENT_STORAGE_KEY = "boson.active.environment.v1"
 
 export function useWorkspace() {
   const [routes, setRoutes] = useState<RouteDefinition[]>([])
   const [environments, setEnvironments] = useState<EnvironmentConfig[]>([])
+  const [selectedEnvironmentName, setSelectedEnvironmentName] = useState<string>(() => {
+    if (typeof window === "undefined") return ""
+    return window.localStorage.getItem(ACTIVE_ENVIRONMENT_STORAGE_KEY) ?? ""
+  })
   const [selectedRouteId, setSelectedRouteId] = useState<string>("")
   const [isLoading, setIsLoading] = useState(true)
   const [isRunning, setIsRunning] = useState(false)
@@ -51,6 +59,12 @@ export function useWorkspace() {
       ])
       setRoutes(routesData)
       setEnvironments(envData)
+      setSelectedEnvironmentName((current) => {
+        if (current && envData.some((environment) => environment.name === current)) {
+          return current
+        }
+        return envData[0]?.name ?? ""
+      })
       setSyncToken((value) => value + 1)
       setSelectedRouteId((current) => {
         if (current && routesData.some((route) => route.id === current)) {
@@ -65,6 +79,7 @@ export function useWorkspace() {
           runId: item.run_id,
           routeId: item.route_id,
           routeName: item.route_name,
+          environmentName: item.environment_name,
           method: item.method,
           path: item.path,
           statusText: `${item.status} ${item.ok ? "OK" : "Error"}`,
@@ -105,15 +120,19 @@ export function useWorkspace() {
     () => routes.find((r) => r.id === selectedRouteId) ?? routes[0],
     [routes, selectedRouteId]
   )
-  const activeEnvironment = environments[0]?.name ?? "local"
-  const activeBaseUrl = environments[0]?.variables?.base_url ?? "http://127.0.0.1:8787"
+  const activeEnvironment = selectedEnvironmentName || environments[0]?.name || "local"
+  const activeBaseUrl =
+    environments.find((environment) => environment.name === activeEnvironment)?.variables
+      ?.base_url ?? "http://127.0.0.1:8787"
+  const activeEnvironmentVariables =
+    environments.find((environment) => environment.name === activeEnvironment)?.variables ?? {}
 
   const runSelectedRoute = useCallback(async (overrides?: RunRouteOverrides) => {
     if (!selectedRoute) return
     setIsRunning(true)
     setError("")
     try {
-      const runResult = await runRoute(selectedRoute.id, overrides)
+      const runResult = await runRoute(selectedRoute.id, overrides, activeEnvironment)
       setResult(runResult)
       const effectivePath = overrides?.path ?? selectedRoute.path
       const effectiveMethod = (overrides?.method ?? selectedRoute.method).toUpperCase()
@@ -126,6 +145,7 @@ export function useWorkspace() {
           runId: runResult.run_id,
           routeId: selectedRoute.id,
           routeName: selectedRoute.name,
+          environmentName: activeEnvironment,
           method: effectiveMethod,
           path: requestUrl,
           statusText: `${runResult.status} ${runResult.status < 400 ? "OK" : "Error"}`,
@@ -151,6 +171,7 @@ export function useWorkspace() {
           id: crypto.randomUUID(),
           routeId: selectedRoute.id,
           routeName: selectedRoute.name,
+          environmentName: activeEnvironment,
           method: effectiveMethod,
           path: requestUrl,
           statusText: "RUN_FAILED",
@@ -163,7 +184,33 @@ export function useWorkspace() {
     } finally {
       setIsRunning(false)
     }
-  }, [selectedRoute, activeBaseUrl])
+  }, [selectedRoute, activeBaseUrl, activeEnvironment])
+
+  const createEnvironmentConfig = useCallback(
+    async (payload: EnvironmentConfig) => {
+      await createEnvironment(payload)
+      await loadWorkspace()
+      setSelectedEnvironmentName(payload.name)
+    },
+    [loadWorkspace]
+  )
+
+  const updateEnvironmentConfig = useCallback(
+    async (previousName: string, payload: EnvironmentConfig) => {
+      await updateEnvironment(previousName, payload)
+      await loadWorkspace()
+      setSelectedEnvironmentName(payload.name)
+    },
+    [loadWorkspace]
+  )
+
+  const deleteEnvironmentConfig = useCallback(
+    async (name: string) => {
+      await deleteEnvironment(name)
+      await loadWorkspace()
+    },
+    [loadWorkspace]
+  )
 
   const rerunById = useCallback(async (runId: string) => {
     setIsRunning(true)
@@ -198,12 +245,26 @@ export function useWorkspace() {
     window.localStorage.setItem(TIMELINE_STORAGE_KEY, JSON.stringify(timeline))
   }, [timeline])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (!selectedEnvironmentName) return
+    window.localStorage.setItem(ACTIVE_ENVIRONMENT_STORAGE_KEY, selectedEnvironmentName)
+  }, [selectedEnvironmentName])
+
   return {
     routes,
     selectedRoute,
     selectedRouteId,
     setSelectedRouteId,
     activeEnvironment,
+    activeBaseUrl,
+    activeEnvironmentVariables,
+    environments,
+    selectedEnvironmentName: activeEnvironment,
+    setSelectedEnvironmentName,
+    createEnvironmentConfig,
+    updateEnvironmentConfig,
+    deleteEnvironmentConfig,
     isLoading,
     isRunning,
     error,

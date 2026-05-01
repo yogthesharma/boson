@@ -17,6 +17,9 @@ export function App() {
     selectedRoute,
     setSelectedRouteId,
     activeEnvironment,
+    activeBaseUrl,
+    activeEnvironmentVariables,
+    environments,
     isLoading,
     isRunning,
     error,
@@ -28,6 +31,10 @@ export function App() {
     clearTimeline,
     runSelectedRoute,
     rerunById,
+    setSelectedEnvironmentName,
+    createEnvironmentConfig,
+    updateEnvironmentConfig,
+    deleteEnvironmentConfig,
   } = useWorkspace()
 
   return (
@@ -44,7 +51,6 @@ export function App() {
         selectedRouteId={selectedRoute?.id}
         onSelectRoute={setSelectedRouteId}
         lastRunByRoute={lastRunByRoute}
-        activeEnvironment={activeEnvironment}
         isLoading={isLoading}
         syncToken={syncToken}
       />
@@ -52,6 +58,13 @@ export function App() {
         <MainHeader
           selectedRoute={selectedRoute}
           activeEnvironment={activeEnvironment}
+          environments={environments}
+          onEnvironmentChange={setSelectedEnvironmentName}
+          onCreateEnvironment={(payload) => void createEnvironmentConfig(payload)}
+          onUpdateEnvironment={(previous, payload) =>
+            void updateEnvironmentConfig(previous, payload)
+          }
+          onDeleteEnvironment={(name) => void deleteEnvironmentConfig(name)}
           sseConnected={sseConnected}
         />
         <section className="h-[calc(99vh-var(--header-height))]">
@@ -68,6 +81,9 @@ export function App() {
               <ResizablePanel defaultSize={54} minSize={25}>
                 <RequestPreviewCard
                   selectedRoute={selectedRoute}
+                  activeEnvironment={activeEnvironment}
+                  activeBaseUrl={activeBaseUrl}
+                  activeEnvironmentVariables={activeEnvironmentVariables}
                   isRunning={isRunning}
                   onRun={(overrides) => void runSelectedRoute(overrides)}
                 />
