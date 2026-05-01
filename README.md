@@ -33,10 +33,15 @@ This starts:
 - `GET /api/routes` - list route definitions from `.api/routes`
 - `GET /api/environments` - list environment definitions
 - `GET /api/presets` - list reusable preset snippets from `.api/presets`
+- `GET /api/workflows` - list workflow definitions from `.api/workflows`
 - `POST /api/run/:route_id` - execute a route with optional draft overrides
 - `GET /api/runs` - list persisted run summaries
 - `GET /api/runs/:run_id` - fetch full run detail
+- `GET /api/runs/:run_id/artifact` - export route run artifact payload
 - `POST /api/runs/:run_id/re-run` - rerun using the same stored payload
+- `POST /api/workflows/:workflow_id/run` - execute multi-step workflow
+- `GET /api/workflow-runs` - list workflow run details
+- `GET /api/workflow-runs/:run_id/artifact` - export workflow run artifact payload
 - `GET /api/events` - SSE stream for workspace changes
 
 Environment CRUD endpoints are intentionally not exposed. Edit `.api/environments/*.json` directly and let watcher/SSE reload changes into the UI.
@@ -61,6 +66,9 @@ Validation failures include the offending route file path to speed up fixes.
 - Runtime `{{var}}` substitution across path, headers, and body flows
 - Missing environment variable warning in request bar before run
 - Config-first presets tab for applying reusable auth/header/body/settings snippets
+- Workflow runs with shared context extraction across route steps
+- Assertion 2.0 checks (`body_schema`, regex, contains, array length, expression)
+- Exportable run artifacts for both route and workflow executions
 
 ## Environment Model
 
@@ -85,6 +93,16 @@ Example presets:
 - `bearer-service` for standard bearer auth + service headers
 - `json-defaults` for JSON headers + body template
 - `retry-strict` for timeout/retry settings profile
+
+## Workflows Model
+
+- Source of truth: `.api/workflows/*.json`
+- Workflow step inputs:
+  - `route_id` points to existing route config
+  - `vars[]` applies step-local token substitutions
+  - `extract[]` stores response values into shared context for later steps
+- Runtime: `POST /api/workflows/:workflow_id/run` executes steps sequentially in selected environment
+- History/artifacts: workflow runs are queryable and exportable via `/api/workflow-runs/*`
 
 ## Status
 

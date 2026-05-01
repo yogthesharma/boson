@@ -81,6 +81,11 @@ pub enum RouteTest {
     HeaderEquals { key: String, equals: String },
     BodyPathExists { path: String },
     BodyPathEquals { path: String, equals: Value },
+    BodySchema { schema: Value },
+    BodyPathRegex { path: String, pattern: String },
+    BodyPathContains { path: String, value: String },
+    BodyPathArrayLength { path: String, equals: usize },
+    Expression { expr: String },
     ResponseTimeMs { less_than: u64 },
 }
 
@@ -194,9 +199,39 @@ pub struct PresetDefinition {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowDefinition {
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub steps: Vec<WorkflowStep>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowStep {
+    pub route_id: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub vars: Vec<RouteVar>,
+    #[serde(default)]
+    pub extract: Vec<WorkflowExtractRule>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowExtractRule {
+    pub key: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceSnapshot {
     pub project: ProjectConfig,
     pub environments: Vec<EnvironmentConfig>,
     pub presets: Vec<PresetDefinition>,
+    pub workflows: Vec<WorkflowDefinition>,
     pub routes: Vec<RouteDefinition>,
 }

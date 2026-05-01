@@ -13,7 +13,10 @@ use axum::{
 use boson_core::{
     execution::{run_route, RunResult},
     loader::load_workspace,
-    schema::{EnvironmentConfig, PresetDefinition, ProjectConfig, RouteDefinition, RouteTest, RouteVar, WorkspaceSnapshot},
+    schema::{
+        EnvironmentConfig, PresetDefinition, ProjectConfig, RouteDefinition, RouteTest, RouteVar,
+        WorkflowDefinition, WorkspaceSnapshot,
+    },
 };
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use reqwest::Client;
@@ -41,6 +44,7 @@ pub struct AppState {
     pub http_client: Client,
     pub workspace_events: broadcast::Sender<()>,
     run_history: Arc<RwLock<VecDeque<RunHistoryItem>>>,
+    workflow_history: Arc<RwLock<VecDeque<WorkflowRunHistoryItem>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,6 +60,51 @@ struct RunHistoryItem {
     result: RunResult,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WorkflowRunHistoryItem {
+    run_id: String,
+    workflow_id: String,
+    workflow_name: String,
+    environment_name: String,
+    created_at_ms: u64,
+    steps: Vec<WorkflowStepResult>,
+    shared_context: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WorkflowStepResult {
+    step_name: String,
+    route_id: String,
+    run: RunResult,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RunArtifact {
+    kind: String,
+    run_id: String,
+    environment_name: String,
+    created_at_ms: u64,
+    request: Value,
+    result: RunResult,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WorkflowRunArtifact {
+    kind: String,
+    run_id: String,
+    workflow_id: String,
+    workflow_name: String,
+    environment_name: String,
+    created_at_ms: u64,
+    steps: Vec<WorkflowStepResult>,
+    shared_context: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Serialize)]
+struct ApiErrorBody {
+    error: String,
+}
+
 pub async fn run_local_server(root_dir: PathBuf, base_url: String, addr: SocketAddr) -> Result<()> {
     let (workspace_events, _) = broadcast::channel(128);
     let _watcher = start_workspace_watcher(root_dir.join(".api"), workspace_events.clone())?;
@@ -66,6 +115,7 @@ pub async fn run_local_server(root_dir: PathBuf, base_url: String, addr: SocketA
         http_client: Client::new(),
         workspace_events,
         run_history: Arc::new(RwLock::new(VecDeque::new())),
+        workflow_history: Arc::new(RwLock::new(VecDeque::new())),
     });
 
     let app = Router::new()
@@ -74,10 +124,22 @@ pub async fn run_local_server(root_dir: PathBuf, base_url: String, addr: SocketA
         .route("/api/routes", get(list_routes))
         .route("/api/environments", get(list_environments))
         .route("/api/presets", get(list_presets))
+        .route("/api/workflows", get(list_workflows))
         .route("/api/run/:route_id", post(run_route_handler))
         .route("/api/runs", get(list_runs).post(run_with_payload_handler))
         .route("/api/runs/:run_id", get(get_run_detail))
+        .route("/api/runs/:run_id/artifact", get(get_run_artifact))
         .route("/api/runs/:run_id/re-run", post(rerun_handler))
+        .route(
+            "/api/workflows/:workflow_id/run",
+            post(run_workflow_handler),
+        )
+        .route("/api/workflow-runs", get(list_workflow_runs))
+        .route("/api/workflow-runs/:run_id", get(get_workflow_run_detail))
+        .route(
+            "/api/workflow-runs/:run_id/artifact",
+            get(get_workflow_run_artifact),
+        )
         .route("/api/events", get(events_handler))
         .route("/demo/rest/resource", any(rest_resource_handler))
         .route("/demo/rest/search", get(rest_search_handler))
@@ -115,22 +177,39 @@ async fn list_presets(State(state): State<Arc<AppState>>) -> Json<Vec<PresetDefi
     Json(snapshot.presets)
 }
 
+async fn list_workflows(State(state): State<Arc<AppState>>) -> Json<Vec<WorkflowDefinition>> {
+    let snapshot = read_snapshot(&state).unwrap_or_else(|_| default_snapshot());
+    Json(snapshot.workflows)
+}
 
 async fn run_route_handler(
     Path(route_id): Path<String>,
     Query(query): Query<RunRouteQuery>,
     State(state): State<Arc<AppState>>,
     body: Option<Json<RunRouteRequest>>,
-) -> Result<Json<RunResult>, axum::http::StatusCode> {
+) -> Result<Json<RunResult>, (axum::http::StatusCode, Json<ApiErrorBody>)> {
     let request = body.map(|payload| payload.0);
     let result = run_route_by_id(&state, route_id, request, query.environment)
         .await
-        .map_err(|_| axum::http::StatusCode::BAD_GATEWAY)?;
+        .map_err(|err| {
+            (
+                axum::http::StatusCode::BAD_GATEWAY,
+                Json(ApiErrorBody {
+                    error: format!("run failed: {}", err),
+                }),
+            )
+        })?;
     Ok(Json(result))
 }
 
 #[derive(Debug, Clone, Deserialize)]
 struct RunRouteQuery {
+    #[serde(default)]
+    environment: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RunWorkflowQuery {
     #[serde(default)]
     environment: Option<String>,
 }
@@ -147,15 +226,22 @@ struct RunWithPayloadRequest {
 async fn run_with_payload_handler(
     State(state): State<Arc<AppState>>,
     Json(request): Json<RunWithPayloadRequest>,
-) -> Result<Json<RunResult>, axum::http::StatusCode> {
+) -> Result<Json<RunResult>, (axum::http::StatusCode, Json<ApiErrorBody>)> {
     let result = run_route_by_id(
         &state,
         request.route_id,
         Some(request.overrides),
         request.environment,
     )
-        .await
-        .map_err(|_| axum::http::StatusCode::BAD_GATEWAY)?;
+    .await
+    .map_err(|err| {
+        (
+            axum::http::StatusCode::BAD_GATEWAY,
+            Json(ApiErrorBody {
+                error: format!("run failed: {}", err),
+            }),
+        )
+    })?;
     Ok(Json(result))
 }
 
@@ -205,13 +291,39 @@ async fn get_run_detail(
     Ok(Json(item))
 }
 
+async fn get_run_artifact(
+    Path(run_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<RunArtifact>, axum::http::StatusCode> {
+    let history = state.run_history.read().await;
+    let item = history
+        .iter()
+        .find(|entry| entry.run_id == run_id)
+        .cloned()
+        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    Ok(Json(RunArtifact {
+        kind: "route-run".to_string(),
+        run_id: item.run_id,
+        environment_name: item.environment_name,
+        created_at_ms: item.created_at_ms,
+        request: serde_json::json!({
+            "route_id": item.route_id,
+            "route_name": item.route_name,
+            "method": item.method,
+            "path": item.path,
+            "overrides": item.overrides,
+        }),
+        result: item.result,
+    }))
+}
+
 async fn run_route_by_id(
     state: &Arc<AppState>,
     route_id: String,
     request: Option<RunRouteRequest>,
     environment_name: Option<String>,
 ) -> Result<RunResult> {
-    let snapshot = read_snapshot(&state)?;
+    let snapshot = read_snapshot(state)?;
     let route = snapshot
         .routes
         .iter()
@@ -223,17 +335,7 @@ async fn run_route_by_id(
         route.clone()
     };
 
-    let env = environment_name
-        .as_deref()
-        .and_then(|name| snapshot.environments.iter().find(|item| item.name == name))
-        .or_else(|| {
-            snapshot
-                .environments
-                .iter()
-                .find(|item| item.name == snapshot.project.default_environment)
-        })
-        .or_else(|| snapshot.environments.first())
-        .ok_or_else(|| anyhow::anyhow!("no environment configured"))?;
+    let env = pick_environment(&snapshot, environment_name.as_deref(), &state.base_url)?;
 
     let base_url = env
         .variables
@@ -242,7 +344,17 @@ async fn run_route_by_id(
         .map(String::as_str)
         .unwrap_or(&state.base_url);
 
-    let mut result = run_route(&state.http_client, base_url, &route, env).await?;
+    let mut result = run_route(&state.http_client, base_url, &route, env)
+        .await
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "environment '{}' (base_url='{}') route '{}' failed: {}",
+                env.name,
+                base_url,
+                route.id,
+                err
+            )
+        })?;
     let run_id = Uuid::new_v4().to_string();
     result.run_id = run_id.clone();
 
@@ -269,16 +381,191 @@ async fn run_route_by_id(
     Ok(result)
 }
 
+async fn run_workflow_by_id(
+    state: &Arc<AppState>,
+    workflow_id: String,
+    environment_name: Option<String>,
+) -> Result<WorkflowRunHistoryItem> {
+    let snapshot = read_snapshot(state)?;
+    let workflow = snapshot
+        .workflows
+        .iter()
+        .find(|item| item.id == workflow_id)
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("workflow not found: {}", workflow_id))?;
+    let env = pick_environment(&snapshot, environment_name.as_deref(), &state.base_url)?;
+    let base_url = env
+        .variables
+        .get("base_url")
+        .filter(|value| !value.trim().is_empty())
+        .map(String::as_str)
+        .unwrap_or(&state.base_url);
+
+    let mut shared_context: BTreeMap<String, String> = BTreeMap::new();
+    let mut steps = Vec::new();
+    for step in &workflow.steps {
+        let route = snapshot
+            .routes
+            .iter()
+            .find(|item| item.id == step.route_id)
+            .ok_or_else(|| anyhow::anyhow!("route not found for step: {}", step.route_id))?
+            .clone();
+
+        let mut route_with_step_vars = route;
+        if !step.vars.is_empty() {
+            for var in &step.vars {
+                if var.enabled == Some(false) {
+                    continue;
+                }
+                let resolved_value =
+                    resolve_with_context(&var.value, &shared_context, &env.variables);
+                let token = format!("{{{{{}}}}}", var.key);
+                route_with_step_vars.path =
+                    route_with_step_vars.path.replace(&token, &resolved_value);
+                for value in route_with_step_vars.headers.values_mut() {
+                    *value = value.replace(&token, &resolved_value);
+                }
+                if let Some(body) = &mut route_with_step_vars.body {
+                    replace_json_tokens(body, &token, &resolved_value);
+                }
+            }
+        }
+
+        let mut env_for_step = env.clone();
+        for (key, value) in &shared_context {
+            env_for_step.variables.insert(key.clone(), value.clone());
+        }
+        let run = run_route(
+            &state.http_client,
+            base_url,
+            &route_with_step_vars,
+            &env_for_step,
+        )
+        .await
+        .map_err(|err| anyhow::anyhow!("step '{}' failed: {}", step.route_id, err))?;
+        for rule in &step.extract {
+            if let Some(body) = &run.response_body {
+                if let Some(value) = json_path_get(body, &rule.path) {
+                    let text = match value {
+                        Value::String(text) => text.clone(),
+                        other => other.to_string(),
+                    };
+                    shared_context.insert(rule.key.clone(), text);
+                }
+            }
+        }
+        let step_name = step.name.clone().unwrap_or_else(|| step.route_id.clone());
+        steps.push(WorkflowStepResult {
+            step_name,
+            route_id: step.route_id.clone(),
+            run,
+        });
+    }
+
+    let run_id = Uuid::new_v4().to_string();
+    let created_at_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or_default();
+    let item = WorkflowRunHistoryItem {
+        run_id,
+        workflow_id: workflow.id,
+        workflow_name: workflow.name,
+        environment_name: env.name.clone(),
+        created_at_ms,
+        steps,
+        shared_context,
+    };
+
+    let mut history = state.workflow_history.write().await;
+    history.push_front(item.clone());
+    while history.len() > 300 {
+        history.pop_back();
+    }
+    Ok(item)
+}
+
+fn pick_environment<'a>(
+    snapshot: &'a WorkspaceSnapshot,
+    explicit_name: Option<&str>,
+    fallback_base_url: &str,
+) -> Result<&'a EnvironmentConfig> {
+    if snapshot.environments.is_empty() {
+        return Err(anyhow::anyhow!(
+            "no environment configured (fallback base URL: {})",
+            fallback_base_url
+        ));
+    }
+    let env = explicit_name
+        .and_then(|name| snapshot.environments.iter().find(|item| item.name == name))
+        .or_else(|| {
+            snapshot
+                .environments
+                .iter()
+                .find(|item| item.name == snapshot.project.default_environment)
+        })
+        .or_else(|| snapshot.environments.first())
+        .ok_or_else(|| anyhow::anyhow!("no environment configured"))?;
+    Ok(env)
+}
+
+fn json_path_get<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
+    let mut current = value;
+    for segment in path.trim_start_matches("$.").split('.') {
+        if segment.is_empty() {
+            continue;
+        }
+        if let Some((key, index)) = parse_array_segment(segment) {
+            current = current.get(key)?;
+            current = current.get(index)?;
+            continue;
+        }
+        current = current.get(segment)?;
+    }
+    Some(current)
+}
+
+fn parse_array_segment(segment: &str) -> Option<(&str, usize)> {
+    let open = segment.find('[')?;
+    let close = segment.find(']')?;
+    if close <= open + 1 {
+        return None;
+    }
+    let key = &segment[..open];
+    let index = segment[(open + 1)..close].parse::<usize>().ok()?;
+    Some((key, index))
+}
+
+fn resolve_with_context(
+    raw: &str,
+    shared_context: &BTreeMap<String, String>,
+    env_vars: &BTreeMap<String, String>,
+) -> String {
+    let mut output = raw.to_string();
+    for (key, value) in shared_context {
+        output = output.replace(&format!("{{{{{}}}}}", key), value);
+    }
+    for (key, value) in env_vars {
+        output = output.replace(&format!("{{{{{}}}}}", key), value);
+    }
+    output
+}
+
 async fn rerun_handler(
     Path(run_id): Path<String>,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<RunResult>, axum::http::StatusCode> {
+) -> Result<Json<RunResult>, (axum::http::StatusCode, Json<ApiErrorBody>)> {
     let history = state.run_history.read().await;
     let item = history
         .iter()
         .find(|entry| entry.run_id == run_id)
         .cloned()
-        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
+        .ok_or((
+            axum::http::StatusCode::NOT_FOUND,
+            Json(ApiErrorBody {
+                error: "run not found".to_string(),
+            }),
+        ))?;
     drop(history);
     let result = run_route_by_id(
         &state,
@@ -286,9 +573,76 @@ async fn rerun_handler(
         item.overrides,
         Some(item.environment_name),
     )
-        .await
-        .map_err(|_| axum::http::StatusCode::BAD_GATEWAY)?;
+    .await
+    .map_err(|err| {
+        (
+            axum::http::StatusCode::BAD_GATEWAY,
+            Json(ApiErrorBody {
+                error: format!("re-run failed: {}", err),
+            }),
+        )
+    })?;
     Ok(Json(result))
+}
+
+async fn run_workflow_handler(
+    Path(workflow_id): Path<String>,
+    Query(query): Query<RunWorkflowQuery>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<WorkflowRunHistoryItem>, (axum::http::StatusCode, Json<ApiErrorBody>)> {
+    let result = run_workflow_by_id(&state, workflow_id, query.environment)
+        .await
+        .map_err(|err| {
+            (
+                axum::http::StatusCode::BAD_GATEWAY,
+                Json(ApiErrorBody {
+                    error: format!("workflow run failed: {}", err),
+                }),
+            )
+        })?;
+    Ok(Json(result))
+}
+
+async fn list_workflow_runs(
+    State(state): State<Arc<AppState>>,
+) -> Json<Vec<WorkflowRunHistoryItem>> {
+    let history = state.workflow_history.read().await;
+    Json(history.iter().cloned().collect())
+}
+
+async fn get_workflow_run_detail(
+    Path(run_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<WorkflowRunHistoryItem>, axum::http::StatusCode> {
+    let history = state.workflow_history.read().await;
+    let item = history
+        .iter()
+        .find(|entry| entry.run_id == run_id)
+        .cloned()
+        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    Ok(Json(item))
+}
+
+async fn get_workflow_run_artifact(
+    Path(run_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<WorkflowRunArtifact>, axum::http::StatusCode> {
+    let history = state.workflow_history.read().await;
+    let item = history
+        .iter()
+        .find(|entry| entry.run_id == run_id)
+        .cloned()
+        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    Ok(Json(WorkflowRunArtifact {
+        kind: "workflow-run".to_string(),
+        run_id: item.run_id,
+        workflow_id: item.workflow_id,
+        workflow_name: item.workflow_name,
+        environment_name: item.environment_name,
+        created_at_ms: item.created_at_ms,
+        steps: item.steps,
+        shared_context: item.shared_context,
+    }))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -448,11 +802,11 @@ async fn events_handler(
     State(state): State<Arc<AppState>>,
 ) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
     let rx = state.workspace_events.subscribe();
-    let stream = BroadcastStream::new(rx).filter_map(|message| {
-        match message {
-            Ok(_) => Some(Ok(Event::default().event("workspace-updated").data("changed"))),
-            Err(_) => None,
-        }
+    let stream = BroadcastStream::new(rx).filter_map(|message| match message {
+        Ok(_) => Some(Ok(Event::default()
+            .event("workspace-updated")
+            .data("changed"))),
+        Err(_) => None,
     });
 
     Sse::new(stream).keep_alive(KeepAlive::default())
@@ -567,6 +921,7 @@ fn default_snapshot() -> WorkspaceSnapshot {
         },
         environments: Vec::new(),
         presets: Vec::new(),
+        workflows: Vec::new(),
         routes: Vec::new(),
     }
 }
@@ -738,7 +1093,10 @@ mod tests {
         let client = reqwest::Client::new();
 
         let run_a: Value = client
-            .post(format!("{}/api/run/env-check?environment=env-a", server_base_url))
+            .post(format!(
+                "{}/api/run/env-check?environment=env-a",
+                server_base_url
+            ))
             .send()
             .await
             .expect("run env a")
@@ -749,7 +1107,10 @@ mod tests {
             .expect("json env a");
 
         let run_b: Value = client
-            .post(format!("{}/api/run/env-check?environment=env-b", server_base_url))
+            .post(format!(
+                "{}/api/run/env-check?environment=env-b",
+                server_base_url
+            ))
             .send()
             .await
             .expect("run env b")
@@ -912,5 +1273,199 @@ mod tests {
 
         server_handle.abort();
     }
-}
 
+    #[tokio::test]
+    async fn runs_workflow_and_exposes_artifact_endpoints() {
+        let workspace = tempdir().expect("tempdir");
+        let root = workspace.path();
+        let (target_base_url, target_handle) = start_echo_server().await;
+
+        write_json_file(
+            &root.join(".api/project.json"),
+            json!({
+              "schema_version": "1",
+              "name": "Boson Test",
+              "default_environment": "local"
+            }),
+        );
+        write_json_file(
+            &root.join(".api/environments/local.json"),
+            json!({
+              "name": "local",
+              "variables": {
+                "base_url": target_base_url,
+                "tenant": "alpha"
+              }
+            }),
+        );
+        write_json_file(
+            &root.join(".api/routes/seed.json"),
+            json!({
+              "id": "seed",
+              "name": "Seed",
+              "method": "POST",
+              "path": "/echo/{{tenant}}",
+              "headers": {
+                "content-type": "application/json"
+              },
+              "body": {
+                "seed_id": "seed-123"
+              },
+              "tests": []
+            }),
+        );
+        write_json_file(
+            &root.join(".api/routes/use-token.json"),
+            json!({
+              "id": "use-token",
+              "name": "Use Token",
+              "method": "POST",
+              "path": "/echo/{{tenant}}",
+              "headers": {
+                "x-seed": "{{seed_id}}",
+                "content-type": "application/json"
+              },
+              "body": {
+                "from_workflow": "{{seed_id}}"
+              },
+              "tests": []
+            }),
+        );
+        write_json_file(
+            &root.join(".api/workflows/demo.json"),
+            json!({
+              "id": "demo-flow",
+              "name": "Demo Flow",
+              "steps": [
+                {
+                  "route_id": "seed",
+                  "extract": [
+                    { "key": "seed_id", "path": "$.body.seed_id" }
+                  ]
+                },
+                {
+                  "route_id": "use-token"
+                }
+              ]
+            }),
+        );
+
+        let server_listener = TcpListener::bind("127.0.0.1:0").await.expect("bind server");
+        let server_addr = server_listener.local_addr().expect("server addr");
+        drop(server_listener);
+        let server_handle = tokio::spawn(run_local_server(
+            root.to_path_buf(),
+            "http://127.0.0.1:8787".to_string(),
+            server_addr,
+        ));
+        let server_base_url = format!("http://{}", server_addr);
+        wait_for_health(&server_base_url).await;
+        let client = reqwest::Client::new();
+
+        let workflow_list: Vec<Value> = client
+            .get(format!("{}/api/workflows", server_base_url))
+            .send()
+            .await
+            .expect("list workflows")
+            .error_for_status()
+            .expect("status workflows")
+            .json()
+            .await
+            .expect("workflows json");
+        assert_eq!(workflow_list.len(), 1);
+        assert_eq!(
+            workflow_list[0].get("id").and_then(Value::as_str),
+            Some("demo-flow")
+        );
+
+        let workflow_run: Value = client
+            .post(format!("{}/api/workflows/demo-flow/run", server_base_url))
+            .send()
+            .await
+            .expect("run workflow")
+            .error_for_status()
+            .expect("status workflow")
+            .json()
+            .await
+            .expect("workflow run json");
+        assert_eq!(
+            workflow_run
+                .get("steps")
+                .and_then(Value::as_array)
+                .map(|items| items.len()),
+            Some(2)
+        );
+        assert_eq!(
+            workflow_run
+                .get("shared_context")
+                .and_then(|ctx| ctx.get("seed_id"))
+                .and_then(Value::as_str),
+            Some("seed-123")
+        );
+
+        let workflow_run_id = workflow_run
+            .get("run_id")
+            .and_then(Value::as_str)
+            .expect("workflow run id");
+        let workflow_artifact: Value = client
+            .get(format!(
+                "{}/api/workflow-runs/{}/artifact",
+                server_base_url, workflow_run_id
+            ))
+            .send()
+            .await
+            .expect("workflow artifact")
+            .error_for_status()
+            .expect("status workflow artifact")
+            .json()
+            .await
+            .expect("artifact json");
+        assert_eq!(
+            workflow_artifact.get("kind").and_then(Value::as_str),
+            Some("workflow-run")
+        );
+
+        let route_run: Value = client
+            .post(format!("{}/api/run/seed", server_base_url))
+            .send()
+            .await
+            .expect("run route")
+            .error_for_status()
+            .expect("status route")
+            .json()
+            .await
+            .expect("route run json");
+        let run_id = route_run
+            .get("run_id")
+            .and_then(Value::as_str)
+            .expect("route run id");
+        let route_artifact: Value = client
+            .get(format!("{}/api/runs/{}/artifact", server_base_url, run_id))
+            .send()
+            .await
+            .expect("route artifact")
+            .error_for_status()
+            .expect("status route artifact")
+            .json()
+            .await
+            .expect("route artifact json");
+        assert_eq!(
+            route_artifact.get("kind").and_then(Value::as_str),
+            Some("route-run")
+        );
+
+        server_handle.abort();
+        target_handle.abort();
+    }
+
+    #[test]
+    fn resolves_step_values_with_environment_and_shared_context() {
+        let env_vars = BTreeMap::from([
+            ("tenant".to_string(), "env-tenant".to_string()),
+            ("token".to_string(), "env-token".to_string()),
+        ]);
+        let shared = BTreeMap::from([("token".to_string(), "shared-token".to_string())]);
+        let value = resolve_with_context("{{tenant}}::{{token}}", &shared, &env_vars);
+        assert_eq!(value, "env-tenant::shared-token");
+    }
+}

@@ -28,6 +28,11 @@ export type RouteDefinition = {
     | { type: "header_equals"; key: string; equals: string }
     | { type: "body_path_exists"; path: string }
     | { type: "body_path_equals"; path: string; equals: unknown }
+    | { type: "body_schema"; schema: unknown }
+    | { type: "body_path_regex"; path: string; pattern: string }
+    | { type: "body_path_contains"; path: string; value: string }
+    | { type: "body_path_array_length"; path: string; equals: number }
+    | { type: "expression"; expr: string }
     | { type: "response_time_ms"; less_than: number }
   >
   auth?: {
@@ -123,13 +128,66 @@ export type RunHistoryDetail = {
   result: RunResult
 }
 
+export type WorkflowDefinition = {
+  id: string
+  name: string
+  source_path?: string
+  description?: string
+  steps: Array<{
+    route_id: string
+    name?: string
+    vars?: Array<{ key: string; value: string; enabled?: boolean }>
+    extract?: Array<{ key: string; path: string }>
+  }>
+}
+
+export type WorkflowRunDetail = {
+  run_id: string
+  workflow_id: string
+  workflow_name: string
+  environment_name: string
+  created_at_ms: number
+  steps: Array<{ step_name: string; route_id: string; run: RunResult }>
+  shared_context: Record<string, string>
+}
+
+export type RunArtifact = {
+  kind: "route-run"
+  run_id: string
+  environment_name: string
+  created_at_ms: number
+  request: unknown
+  result: RunResult
+}
+
+export type WorkflowRunArtifact = {
+  kind: "workflow-run"
+  run_id: string
+  workflow_id: string
+  workflow_name: string
+  environment_name: string
+  created_at_ms: number
+  steps: WorkflowRunDetail["steps"]
+  shared_context: Record<string, string>
+}
+
 const API_BASE =
   import.meta.env.VITE_BOSON_API_BASE?.trim() || "http://127.0.0.1:8787"
 
 async function readJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const response = await fetch(input, init)
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`)
+    const fallback = `Request failed: ${response.status}`
+    const contentType = response.headers.get("content-type") ?? ""
+    if (contentType.includes("application/json")) {
+      const data = (await response.json().catch(() => null)) as
+        | { error?: string; message?: string }
+        | null
+      const message = data?.error || data?.message
+      throw new Error(message || fallback)
+    }
+    const text = await response.text().catch(() => "")
+    throw new Error(text.trim() || fallback)
   }
   return response.json() as Promise<T>
 }
@@ -148,6 +206,10 @@ export function getEnvironments(): Promise<EnvironmentConfig[]> {
 
 export function getPresets(): Promise<PresetDefinition[]> {
   return readJson<PresetDefinition[]>(`${API_BASE}/api/presets`)
+}
+
+export function getWorkflows(): Promise<WorkflowDefinition[]> {
+  return readJson<WorkflowDefinition[]>(`${API_BASE}/api/workflows`)
 }
 
 export function runRoute(
@@ -180,6 +242,35 @@ export function rerun(runId: string): Promise<RunResult> {
   return readJson<RunResult>(`${API_BASE}/api/runs/${runId}/re-run`, {
     method: "POST",
   })
+}
+
+export function getRunArtifact(runId: string): Promise<RunArtifact> {
+  return readJson<RunArtifact>(`${API_BASE}/api/runs/${runId}/artifact`)
+}
+
+export function runWorkflow(
+  workflowId: string,
+  environmentName?: string
+): Promise<WorkflowRunDetail> {
+  const searchParams = new URLSearchParams()
+  if (environmentName?.trim()) {
+    searchParams.set("environment", environmentName.trim())
+  }
+  const suffix = searchParams.toString()
+  const url = `${API_BASE}/api/workflows/${workflowId}/run${suffix ? `?${suffix}` : ""}`
+  return readJson<WorkflowRunDetail>(url, { method: "POST" })
+}
+
+export function listWorkflowRuns(): Promise<WorkflowRunDetail[]> {
+  return readJson<WorkflowRunDetail[]>(`${API_BASE}/api/workflow-runs`)
+}
+
+export function getWorkflowRunDetail(runId: string): Promise<WorkflowRunDetail> {
+  return readJson<WorkflowRunDetail>(`${API_BASE}/api/workflow-runs/${runId}`)
+}
+
+export function getWorkflowRunArtifact(runId: string): Promise<WorkflowRunArtifact> {
+  return readJson<WorkflowRunArtifact>(`${API_BASE}/api/workflow-runs/${runId}/artifact`)
 }
 
 export function getEventsUrl(): string {

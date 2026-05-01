@@ -117,6 +117,54 @@
           },
           {
             "type": "object",
+            "required": ["type", "schema"],
+            "properties": {
+              "type": { "const": "body_schema" },
+              "schema": {}
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["type", "path", "pattern"],
+            "properties": {
+              "type": { "const": "body_path_regex" },
+              "path": { "type": "string", "minLength": 1 },
+              "pattern": { "type": "string", "minLength": 1 }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["type", "path", "value"],
+            "properties": {
+              "type": { "const": "body_path_contains" },
+              "path": { "type": "string", "minLength": 1 },
+              "value": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["type", "path", "equals"],
+            "properties": {
+              "type": { "const": "body_path_array_length" },
+              "path": { "type": "string", "minLength": 1 },
+              "equals": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["type", "expr"],
+            "properties": {
+              "type": { "const": "expression" },
+              "expr": { "type": "string", "minLength": 1 }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
             "required": ["type", "less_than"],
             "properties": {
               "type": { "const": "response_time_ms" },

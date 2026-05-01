@@ -1,7 +1,7 @@
 use anyhow::Result;
-use clap::{Parser, Subcommand};
 use boson_core::loader::load_workspace;
 use boson_server::run_local_server;
+use clap::{Parser, Subcommand};
 use std::{
     fs,
     net::SocketAddr,
@@ -154,9 +154,7 @@ fn open_in_browser(url: &str) -> Result<()> {
 
     #[cfg(target_os = "windows")]
     {
-        Command::new("cmd")
-            .args(["/C", "start", "", url])
-            .spawn()?;
+        Command::new("cmd").args(["/C", "start", "", url]).spawn()?;
         return Ok(());
     }
 

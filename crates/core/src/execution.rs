@@ -260,7 +260,9 @@ fn evaluate_tests(
                 TestResult { passed, message }
             }
             RouteTest::BodyPathExists { path } => {
-                let found = response_body.and_then(|body| json_path_get(body, path)).is_some();
+                let found = response_body
+                    .and_then(|body| json_path_get(body, path))
+                    .is_some();
                 let message = if found {
                     format!("body path '{}' exists", path)
                 } else {
@@ -294,12 +296,134 @@ fn evaluate_tests(
                 let message = if passed {
                     format!("response time {}ms < {}ms", elapsed_ms, less_than)
                 } else {
-                    format!("expected response time < {}ms, got {}ms", less_than, elapsed_ms)
+                    format!(
+                        "expected response time < {}ms, got {}ms",
+                        less_than, elapsed_ms
+                    )
+                };
+                TestResult { passed, message }
+            }
+            RouteTest::BodySchema { schema } => {
+                let Some(body) = response_body else {
+                    return TestResult {
+                        passed: false,
+                        message: "expected response body for schema validation".to_string(),
+                    };
+                };
+                let validator = match jsonschema::validator_for(schema) {
+                    Ok(validator) => validator,
+                    Err(err) => {
+                        return TestResult {
+                            passed: false,
+                            message: format!("invalid schema: {}", err),
+                        }
+                    }
+                };
+                let passed = validator.validate(body).is_ok();
+                let message = if passed {
+                    "response body matches schema".to_string()
+                } else {
+                    "response body does not match schema".to_string()
+                };
+                TestResult { passed, message }
+            }
+            RouteTest::BodyPathRegex { path, pattern } => {
+                let regex = regex::Regex::new(pattern);
+                let value = response_body.and_then(|body| json_path_get(body, path));
+                let passed = match (&regex, value) {
+                    (Ok(re), Some(Value::String(text))) => re.is_match(text),
+                    (Ok(re), Some(other)) => re.is_match(&other.to_string()),
+                    _ => false,
+                };
+                let message = if passed {
+                    format!("body path '{}' matches /{}/", path, pattern)
+                } else {
+                    format!("expected body path '{}' to match /{}/", path, pattern)
+                };
+                TestResult { passed, message }
+            }
+            RouteTest::BodyPathContains { path, value } => {
+                let actual = response_body
+                    .and_then(|body| json_path_get(body, path))
+                    .map(|v| match v {
+                        Value::String(text) => text.clone(),
+                        other => other.to_string(),
+                    })
+                    .unwrap_or_default();
+                let passed = actual.contains(value);
+                let message = if passed {
+                    format!("body path '{}' contains '{}'", path, value)
+                } else {
+                    format!("expected body path '{}' to contain '{}'", path, value)
+                };
+                TestResult { passed, message }
+            }
+            RouteTest::BodyPathArrayLength { path, equals } => {
+                let actual_len = response_body
+                    .and_then(|body| json_path_get(body, path))
+                    .and_then(Value::as_array)
+                    .map(|arr| arr.len());
+                let passed = actual_len.map(|len| len == *equals).unwrap_or(false);
+                let message = if passed {
+                    format!("body path '{}' array length == {}", path, equals)
+                } else {
+                    format!(
+                        "expected body path '{}' array length == {}, got {}",
+                        path,
+                        equals,
+                        actual_len
+                            .map(|len| len.to_string())
+                            .unwrap_or_else(|| "<not-array>".to_string())
+                    )
+                };
+                TestResult { passed, message }
+            }
+            RouteTest::Expression { expr } => {
+                let passed = evaluate_expression(expr, status, elapsed_ms, response_body);
+                let message = if passed {
+                    format!("expression passed: {}", expr)
+                } else {
+                    format!("expression failed: {}", expr)
                 };
                 TestResult { passed, message }
             }
         })
         .collect()
+}
+
+fn evaluate_expression(
+    expr: &str,
+    status: u16,
+    elapsed_ms: u128,
+    response_body: Option<&Value>,
+) -> bool {
+    let normalized = expr.trim();
+    if normalized == "status < 400" {
+        return status < 400;
+    }
+    if let Some(threshold) = normalized.strip_prefix("status ==") {
+        return threshold
+            .trim()
+            .parse::<u16>()
+            .map(|expected| status == expected)
+            .unwrap_or(false);
+    }
+    if let Some(threshold) = normalized.strip_prefix("elapsed_ms <") {
+        return threshold
+            .trim()
+            .parse::<u128>()
+            .map(|expected| elapsed_ms < expected)
+            .unwrap_or(false);
+    }
+    if let Some(path) = normalized
+        .strip_prefix("exists(")
+        .and_then(|s| s.strip_suffix(")"))
+    {
+        return response_body
+            .and_then(|body| json_path_get(body, path.trim()))
+            .is_some();
+    }
+    false
 }
 
 fn json_path_get<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
@@ -368,7 +492,9 @@ enum ResolvedSpecialBody {
     Multipart { form: reqwest::multipart::Form },
 }
 
-fn resolve_special_body_from_override(route: &RouteDefinition) -> Result<Option<ResolvedSpecialBody>> {
+fn resolve_special_body_from_override(
+    route: &RouteDefinition,
+) -> Result<Option<ResolvedSpecialBody>> {
     let Some(body) = route.body.as_ref() else {
         return Ok(None);
     };
@@ -380,17 +506,24 @@ fn resolve_special_body_from_override(route: &RouteDefinition) -> Result<Option<
     };
 
     if mode == "binary" {
-        let file_base64 = envelope.get("file_base64").and_then(Value::as_str).unwrap_or_default();
+        let file_base64 = envelope
+            .get("file_base64")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         if !file_base64.trim().is_empty() {
             let bytes = base64::engine::general_purpose::STANDARD
                 .decode(file_base64)
                 .map_err(|err| anyhow::anyhow!("invalid binary file_base64 payload: {}", err))?;
             return Ok(Some(ResolvedSpecialBody::Binary { bytes }));
         }
-        let path = envelope.get("path").and_then(Value::as_str).unwrap_or_default();
+        let path = envelope
+            .get("path")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         if !path.trim().is_empty() {
-            let bytes = fs::read(path)
-                .map_err(|err| anyhow::anyhow!("failed to read binary body file `{}`: {}", path, err))?;
+            let bytes = fs::read(path).map_err(|err| {
+                anyhow::anyhow!("failed to read binary body file `{}`: {}", path, err)
+            })?;
             return Ok(Some(ResolvedSpecialBody::Binary { bytes }));
         }
         return Ok(None);
@@ -407,7 +540,11 @@ fn resolve_special_body_from_override(route: &RouteDefinition) -> Result<Option<
             return Ok(None);
         }
         for entry in entries {
-            let key = entry.get("key").and_then(Value::as_str).unwrap_or_default().to_string();
+            let key = entry
+                .get("key")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
             if key.trim().is_empty() {
                 continue;
             }
@@ -427,7 +564,9 @@ fn resolve_special_body_from_override(route: &RouteDefinition) -> Result<Option<
                 if !file_base64.trim().is_empty() {
                     let bytes = base64::engine::general_purpose::STANDARD
                         .decode(file_base64)
-                        .map_err(|err| anyhow::anyhow!("invalid multipart file_base64 payload: {}", err))?;
+                        .map_err(|err| {
+                            anyhow::anyhow!("invalid multipart file_base64 payload: {}", err)
+                        })?;
                     let part = reqwest::multipart::Part::bytes(bytes).file_name(file_name);
                     form = form.part(key, part);
                 } else {
@@ -452,12 +591,13 @@ fn resolve_special_body_from_override(route: &RouteDefinition) -> Result<Option<
                         .and_then(|name| name.to_str())
                         .unwrap_or("upload.bin")
                         .to_string();
-                    let part =
-                        reqwest::multipart::Part::bytes(bytes).file_name(if file_name == "upload.bin" {
+                    let part = reqwest::multipart::Part::bytes(bytes).file_name(
+                        if file_name == "upload.bin" {
                             inferred_name
                         } else {
                             file_name
-                        });
+                        },
+                    );
                     form = form.part(key, part);
                 }
             } else {
@@ -483,7 +623,11 @@ fn resolve_special_body_from_file_config(
     };
     match file.mode.as_deref() {
         Some("binary") => {
-            let Some(path) = file.path.as_deref().filter(|value| !value.trim().is_empty()) else {
+            let Some(path) = file
+                .path
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+            else {
                 return Ok(None);
             };
             let bytes = fs::read(path)
@@ -533,6 +677,7 @@ fn resolve_special_body_from_file_config(
 mod tests {
     use super::*;
     use crate::schema::{RouteBodyConfig, RouteBodyEntry, RouteFileConfig, RouteMultipartField};
+    use serde_json::json;
 
     fn base_route() -> RouteDefinition {
         RouteDefinition {
@@ -612,14 +757,19 @@ mod tests {
             }],
         });
         let resolved = resolve_special_body_from_file_config(&route).expect("resolve");
-        assert!(matches!(resolved, Some(ResolvedSpecialBody::Multipart { .. })));
+        assert!(matches!(
+            resolved,
+            Some(ResolvedSpecialBody::Multipart { .. })
+        ));
     }
 
     #[test]
     fn applies_environment_tokens_to_route_fields() {
         let mut route = base_route();
         route.path = "/users/{{tenant}}/items?cursor={{cursor}}".to_string();
-        route.headers.insert("x-tenant".to_string(), "{{tenant}}".to_string());
+        route
+            .headers
+            .insert("x-tenant".to_string(), "{{tenant}}".to_string());
         route.body = Some(serde_json::json!({
             "tenant": "{{tenant}}",
             "nested": { "cursor": "{{cursor}}" }
@@ -652,7 +802,11 @@ mod tests {
         let resolved = apply_environment_variables_to_route(&route, &environment);
         assert!(resolved.path.contains("/users/acme/items"));
         assert_eq!(
-            resolved.headers.get("x-tenant").cloned().unwrap_or_default(),
+            resolved
+                .headers
+                .get("x-tenant")
+                .cloned()
+                .unwrap_or_default(),
             "acme"
         );
         assert_eq!(
@@ -697,5 +851,44 @@ mod tests {
         let route_b = apply_environment_variables_to_route(&route, &env_b);
         assert_eq!(route_a.path, "/users/team-a");
         assert_eq!(route_b.path, "/users/team-b");
+    }
+
+    #[test]
+    fn evaluates_assertions_2_0_variants() {
+        let tests = vec![
+            RouteTest::BodySchema {
+                schema: json!({
+                    "type": "object",
+                    "required": ["name", "items"],
+                    "properties": {
+                        "name": { "type": "string" },
+                        "items": { "type": "array" }
+                    }
+                }),
+            },
+            RouteTest::BodyPathRegex {
+                path: "$.name".to_string(),
+                pattern: "^bo.*".to_string(),
+            },
+            RouteTest::BodyPathContains {
+                path: "$.description".to_string(),
+                value: "workspace".to_string(),
+            },
+            RouteTest::BodyPathArrayLength {
+                path: "$.items".to_string(),
+                equals: 2,
+            },
+            RouteTest::Expression {
+                expr: "status < 400".to_string(),
+            },
+        ];
+        let body = json!({
+            "name": "boson",
+            "description": "repo-native API workspace",
+            "items": [1, 2]
+        });
+        let headers = BTreeMap::new();
+        let results = evaluate_tests(200, 50, &headers, Some(&body), &tests);
+        assert!(results.iter().all(|item| item.passed));
     }
 }
