@@ -1,18 +1,59 @@
 # Boson
 
-Repo-native API workspace where `.api/` JSON files are the source of truth.
+Boson is a repo-native API workspace where `.api/` JSON files are the source of truth and the UI acts as a Postman/Bruno-style execution workbench.
 
-## Architecture
+## Why Boson
+
+- Config-first routes and environments live in your repo under `.api/`.
+- Rich request editing in UI with local draft overrides (no accidental file writes).
+- Run history behaves like first-class platform runs with `run_id`, detail lookup, and rerun.
+- Route config is schema-validated on load for safer onboarding and fewer runtime surprises.
+
+## Project Structure
 
 - `crates/core`: schema, loading, execution primitives
 - `crates/server`: local HTTP server for UI + runtime APIs
 - `crates/cli`: command entrypoint (`init`, `dev`, `run`)
-- `ui`: local browser app (read-only + actionable)
+- `ui`: browser workbench for request editing, execution, and inspection
 
-## Current Status
+## Local Development
 
-This repository is scaffolded for local-first MVP development with a modular layout designed for future cloud reuse.
+```bash
+cargo run -p boson-cli -- dev
+```
 
-## Next Step
+This starts:
 
-Follow `TODO.md` from top to bottom.
+- local API server on `127.0.0.1:8787`
+- UI dev server on `http://localhost:5173`
+
+## Runtime APIs
+
+- `GET /api/routes` - list route definitions from `.api/routes`
+- `GET /api/environments` - list environment definitions
+- `POST /api/run/:route_id` - execute a route with optional draft overrides
+- `GET /api/runs` - list persisted run summaries
+- `GET /api/runs/:run_id` - fetch full run detail
+- `POST /api/runs/:run_id/re-run` - rerun using the same stored payload
+- `GET /api/events` - SSE stream for workspace changes
+
+## Route Schema and Validation
+
+Route files are validated against the embedded JSON schema at load time.
+
+- Schema file: `crates/core/src/route.schema.json`
+- Field guide: `.api/ROUTE_SCHEMA.md`
+
+Validation failures include the offending route file path to speed up fixes.
+
+## Current Product Capabilities
+
+- Request bar edits (method/url) with reset-to-default behavior
+- Params/Headers table + bulk editing with polished row interactions
+- Auth, vars, scripts, docs, file, and settings tabs (config-first defaults)
+- Response inspection tabs for payload, headers, timeline, and tests
+- Run timeline with rerun action backed by server-side run history
+
+## Status
+
+Boson now ships an end-to-end local platform demo loop: configure in `.api`, run from UI, inspect history, rerun with the same payload, and iterate safely.

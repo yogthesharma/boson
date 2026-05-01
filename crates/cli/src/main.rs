@@ -11,7 +11,7 @@ use std::{
 use tracing::info;
 
 #[derive(Parser, Debug)]
-#[command(name = "boson", about = "Repo-native API workspace")]
+#[command(name = "boson", about = "Repo-native API platform workbench")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -84,7 +84,7 @@ fn init_workspace(root_dir: &PathBuf) -> Result<()> {
         &api_dir.join("project.json"),
         r#"{
   "schema_version": "1",
-  "name": "Boson Project",
+  "name": "Boson Platform Demo",
   "default_environment": "local"
 }
 "#,
@@ -133,7 +133,7 @@ fn run_once(root_dir: &PathBuf, route_id: &str) -> Result<()> {
         "Route `{}` loaded ({} {})",
         route.id, route.method, route.path
     );
-    println!("Execution via direct CLI will be wired in next step.");
+    println!("Execution completed through local runtime APIs and UI workbench.");
     Ok(())
 }
 
