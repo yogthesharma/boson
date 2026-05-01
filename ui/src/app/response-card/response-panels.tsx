@@ -12,6 +12,12 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TabsContent } from "@/components/ui/tabs"
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
   Table,
   TableBody,
   TableCell,
@@ -258,9 +264,18 @@ export function ResponsePanels(props: ResponsePanelsProps) {
                             {item.method}
                           </span>
                           {item.environmentName && (
-                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                              {item.environmentName}
-                            </span>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                                    {item.environmentName}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent sideOffset={6}>
+                                  Base URL: {item.environmentBaseUrl ?? "n/a"}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           )}
                           <span className="truncate text-foreground/90">{item.path}</span>
                         </div>

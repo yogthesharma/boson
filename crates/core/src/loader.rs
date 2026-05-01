@@ -13,7 +13,7 @@ pub fn load_workspace(root: &Path) -> Result<WorkspaceSnapshot> {
     let environments_dir = api_root.join("environments");
     let routes_dir = api_root.join("routes");
 
-    let environments = read_json_dir::<EnvironmentConfig>(&environments_dir)
+    let environments = read_environments_dir(&environments_dir)
         .with_context(|| "failed to load environment files")?;
     let routes = read_routes_dir(&routes_dir)
         .with_context(|| "failed to load route files")?;
@@ -31,20 +31,33 @@ fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
     Ok(parsed)
 }
 
-fn read_json_dir<T: serde::de::DeserializeOwned>(path: &Path) -> Result<Vec<T>> {
+fn read_environments_dir(path: &Path) -> Result<Vec<EnvironmentConfig>> {
     if !path.exists() {
         return Ok(Vec::new());
     }
 
-    let mut items = Vec::new();
+    let mut files = Vec::new();
     for entry in fs::read_dir(path)? {
         let entry = entry?;
         let file_path = entry.path();
         if file_path.extension().and_then(|ext| ext.to_str()) == Some("json") {
-            items.push(read_json(&file_path)?);
+            files.push(file_path);
         }
     }
-    Ok(items)
+    files.sort();
+
+    let mut environments = Vec::new();
+    for file_path in files {
+        let mut environment: EnvironmentConfig = read_json(&file_path)?;
+        let rel = file_path
+            .strip_prefix(path)
+            .unwrap_or(&file_path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        environment.source_path = Some(rel);
+        environments.push(environment);
+    }
+    Ok(environments)
 }
 
 fn read_routes_dir(path: &Path) -> Result<Vec<RouteDefinition>> {

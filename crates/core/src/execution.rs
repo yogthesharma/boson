@@ -641,6 +641,7 @@ mod tests {
 
         let environment = EnvironmentConfig {
             name: "dev".to_string(),
+            source_path: None,
             variables: BTreeMap::from([
                 ("tenant".to_string(), "acme".to_string()),
                 ("cursor".to_string(), "abc".to_string()),
@@ -681,11 +682,13 @@ mod tests {
 
         let env_a = EnvironmentConfig {
             name: "dev".to_string(),
+            source_path: None,
             variables: BTreeMap::from([("tenant".to_string(), "team-a".to_string())]),
             secret_keys: vec![],
         };
         let env_b = EnvironmentConfig {
             name: "staging".to_string(),
+            source_path: None,
             variables: BTreeMap::from([("tenant".to_string(), "team-b".to_string())]),
             secret_keys: vec![],
         };

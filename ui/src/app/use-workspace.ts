@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
+  getProject,
   listRuns,
   getEnvironments,
   getEventsUrl,
@@ -7,6 +8,7 @@ import {
   rerun,
   runRoute,
   type EnvironmentConfig,
+  type ProjectConfig,
   type RunRouteOverrides,
   type RouteDefinition,
   type RunResult,
@@ -17,6 +19,7 @@ const TIMELINE_STORAGE_KEY = "boson.response.timeline.v1"
 const ACTIVE_ENVIRONMENT_STORAGE_KEY = "boson.active.environment.v1"
 
 export function useWorkspace() {
+  const [project, setProject] = useState<ProjectConfig | null>(null)
   const [routes, setRoutes] = useState<RouteDefinition[]>([])
   const [environments, setEnvironments] = useState<EnvironmentConfig[]>([])
   const [selectedEnvironmentName, setSelectedEnvironmentName] = useState<string>(() => {
@@ -49,11 +52,13 @@ export function useWorkspace() {
     setIsLoading(true)
     setError("")
     try {
-      const [routesData, envData, runs] = await Promise.all([
+      const [projectData, routesData, envData, runs] = await Promise.all([
+        getProject(),
         getRoutes(),
         getEnvironments(),
         listRuns().catch(() => []),
       ])
+      setProject(projectData)
       setRoutes(routesData)
       setEnvironments(envData)
       setSelectedEnvironmentName((current) => {
@@ -71,18 +76,22 @@ export function useWorkspace() {
       })
       setTimeline((current) => {
         if (current.length > 0) return current
-        return runs.slice(0, 200).map((item) => ({
-          id: item.run_id,
-          runId: item.run_id,
-          routeId: item.route_id,
-          routeName: item.route_name,
-          environmentName: item.environment_name,
-          method: item.method,
-          path: item.path,
-          statusText: `${item.status} ${item.ok ? "OK" : "Error"}`,
-          ok: item.ok,
-          createdAt: item.created_at_ms,
-        }))
+        return runs.slice(0, 200).map((item) => {
+          const environment = envData.find((env) => env.name === item.environment_name)
+          return {
+            id: item.run_id,
+            runId: item.run_id,
+            routeId: item.route_id,
+            routeName: item.route_name,
+            environmentName: item.environment_name,
+            environmentBaseUrl: environment?.variables?.base_url,
+            method: item.method,
+            path: item.path,
+            statusText: `${item.status} ${item.ok ? "OK" : "Error"}`,
+            ok: item.ok,
+            createdAt: item.created_at_ms,
+          }
+        })
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load workspace")
@@ -118,11 +127,18 @@ export function useWorkspace() {
     [routes, selectedRouteId]
   )
   const activeEnvironment = selectedEnvironmentName || environments[0]?.name || "local"
+  const defaultEnvironmentName = project?.default_environment || environments[0]?.name || ""
+  const defaultEnvironmentConfig = useMemo(
+    () => environments.find((environment) => environment.name === defaultEnvironmentName),
+    [defaultEnvironmentName, environments]
+  )
+  const activeEnvironmentConfig = useMemo(
+    () => environments.find((environment) => environment.name === activeEnvironment),
+    [activeEnvironment, environments]
+  )
   const activeBaseUrl =
-    environments.find((environment) => environment.name === activeEnvironment)?.variables
-      ?.base_url ?? "http://127.0.0.1:8787"
-  const activeEnvironmentVariables =
-    environments.find((environment) => environment.name === activeEnvironment)?.variables ?? {}
+    activeEnvironmentConfig?.variables?.base_url ?? "http://127.0.0.1:8787"
+  const activeEnvironmentVariables = activeEnvironmentConfig?.variables ?? {}
 
   const runSelectedRoute = useCallback(async (overrides?: RunRouteOverrides) => {
     if (!selectedRoute) return
@@ -143,6 +159,7 @@ export function useWorkspace() {
           routeId: selectedRoute.id,
           routeName: selectedRoute.name,
           environmentName: activeEnvironment,
+          environmentBaseUrl: activeBaseUrl,
           method: effectiveMethod,
           path: requestUrl,
           statusText: `${runResult.status} ${runResult.status < 400 ? "OK" : "Error"}`,
@@ -169,6 +186,7 @@ export function useWorkspace() {
           routeId: selectedRoute.id,
           routeName: selectedRoute.name,
           environmentName: activeEnvironment,
+          environmentBaseUrl: activeBaseUrl,
           method: effectiveMethod,
           path: requestUrl,
           statusText: "RUN_FAILED",
@@ -230,6 +248,9 @@ export function useWorkspace() {
     activeEnvironment,
     activeBaseUrl,
     activeEnvironmentVariables,
+    activeEnvironmentConfig,
+    defaultEnvironmentName,
+    defaultEnvironmentConfig,
     environments,
     selectedEnvironmentName: activeEnvironment,
     setSelectedEnvironmentName,

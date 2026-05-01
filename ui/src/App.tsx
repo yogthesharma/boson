@@ -19,6 +19,9 @@ export function App() {
     activeEnvironment,
     activeBaseUrl,
     activeEnvironmentVariables,
+    activeEnvironmentConfig,
+    defaultEnvironmentName,
+    defaultEnvironmentConfig,
     environments,
     isLoading,
     isRunning,
@@ -54,6 +57,10 @@ export function App() {
         <MainHeader
           selectedRoute={selectedRoute}
           activeEnvironment={activeEnvironment}
+          activeBaseUrl={activeBaseUrl}
+          activeEnvironmentConfig={activeEnvironmentConfig}
+          defaultEnvironmentName={defaultEnvironmentName}
+          defaultEnvironmentConfig={defaultEnvironmentConfig}
           environments={environments}
           onEnvironmentChange={setSelectedEnvironmentName}
         />

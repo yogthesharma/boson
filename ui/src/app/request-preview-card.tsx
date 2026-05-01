@@ -22,6 +22,7 @@ import { SettingsPanel } from "@/app/request-card/settings-panel"
 import { TestsPanel } from "@/app/request-card/tests-panel"
 import { VarsPanel } from "@/app/request-card/vars-panel"
 import { computeMissingEnvironmentVariables } from "@/app/request-card/missing-vars"
+import { computeRequestDiagnostics } from "@/app/request-card/diagnostics"
 import { useEffect, useMemo, useState } from "react"
 import {
   Table,
@@ -233,6 +234,28 @@ export function RequestPreviewCard(props: RequestPreviewCardProps) {
   const missingVariables = useMemo(() => {
     return computeMissingEnvironmentVariables(currentState, activeEnvironmentVariables)
   }, [activeEnvironmentVariables, currentState])
+  const diagnostics = useMemo(
+    () => computeRequestDiagnostics(currentState, missingVariables),
+    [currentState, missingVariables]
+  )
+  const diagnosticsSummary = useMemo(
+    () => ({
+      errorCount: diagnostics.errors.length,
+      warningCount: diagnostics.warnings.length,
+      summaryText:
+        diagnostics.items.length > 0
+          ? diagnostics.items
+              .slice(0, 2)
+              .map((item) => item.message)
+              .join(" | ")
+          : undefined,
+      blockingMessage:
+        diagnostics.errors.length > 0
+          ? diagnostics.errors[0]?.message ?? "Fix diagnostics errors before running."
+          : undefined,
+    }),
+    [diagnostics.errors, diagnostics.warnings.length]
+  )
 
   return (
     <section className="flex h-full min-h-0 flex-col gap-3 overflow-hidden pb-2">
@@ -250,6 +273,7 @@ export function RequestPreviewCard(props: RequestPreviewCardProps) {
               activeEnvironment={activeEnvironment}
               activeBaseUrl={activeBaseUrl}
               missingVariables={missingVariables}
+              diagnostics={diagnosticsSummary}
               hasDraftChanges={hasDraftChanges}
               onMethodChange={(value) => {
                 if (!currentState) return

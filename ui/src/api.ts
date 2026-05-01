@@ -67,8 +67,15 @@ export type RunRouteOverrides = {
 
 export type EnvironmentConfig = {
   name: string
+  source_path?: string
   variables: Record<string, string>
   secret_keys?: string[]
+}
+
+export type ProjectConfig = {
+  schema_version: string
+  name: string
+  default_environment: string
 }
 
 export type RunResult = {
@@ -117,6 +124,10 @@ async function readJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
 
 export function getRoutes(): Promise<RouteDefinition[]> {
   return readJson<RouteDefinition[]>(`${API_BASE}/api/routes`)
+}
+
+export function getProject(): Promise<ProjectConfig> {
+  return readJson<ProjectConfig>(`${API_BASE}/api/project`)
 }
 
 export function getEnvironments(): Promise<EnvironmentConfig[]> {

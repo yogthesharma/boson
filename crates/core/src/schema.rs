@@ -12,6 +12,8 @@ pub struct ProjectConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnvironmentConfig {
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
     #[serde(default)]
     pub variables: BTreeMap<String, String>,
     #[serde(default)]

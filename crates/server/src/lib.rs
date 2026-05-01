@@ -13,7 +13,7 @@ use axum::{
 use boson_core::{
     execution::{run_route, RunResult},
     loader::load_workspace,
-    schema::{EnvironmentConfig, RouteDefinition, RouteTest, RouteVar, WorkspaceSnapshot},
+    schema::{EnvironmentConfig, ProjectConfig, RouteDefinition, RouteTest, RouteVar, WorkspaceSnapshot},
 };
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use reqwest::Client;
@@ -70,6 +70,7 @@ pub async fn run_local_server(root_dir: PathBuf, base_url: String, addr: SocketA
 
     let app = Router::new()
         .route("/health", get(health))
+        .route("/api/project", get(get_project))
         .route("/api/routes", get(list_routes))
         .route("/api/environments", get(list_environments))
         .route("/api/run/:route_id", post(run_route_handler))
@@ -96,6 +97,11 @@ async fn health() -> impl IntoResponse {
 async fn list_routes(State(state): State<Arc<AppState>>) -> Json<Vec<RouteDefinition>> {
     let snapshot = read_snapshot(&state).unwrap_or_else(|_| default_snapshot());
     Json(snapshot.routes)
+}
+
+async fn get_project(State(state): State<Arc<AppState>>) -> Json<ProjectConfig> {
+    let snapshot = read_snapshot(&state).unwrap_or_else(|_| default_snapshot());
+    Json(snapshot.project)
 }
 
 async fn list_environments(State(state): State<Arc<AppState>>) -> Json<Vec<EnvironmentConfig>> {
