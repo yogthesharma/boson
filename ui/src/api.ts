@@ -123,40 +123,6 @@ export function getEnvironments(): Promise<EnvironmentConfig[]> {
   return readJson<EnvironmentConfig[]>(`${API_BASE}/api/environments`)
 }
 
-export function createEnvironment(payload: EnvironmentConfig): Promise<EnvironmentConfig> {
-  return readJson<EnvironmentConfig>(`${API_BASE}/api/environments`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  })
-}
-
-export function updateEnvironment(
-  name: string,
-  payload: EnvironmentConfig
-): Promise<EnvironmentConfig> {
-  return readJson<EnvironmentConfig>(
-    `${API_BASE}/api/environments/${encodeURIComponent(name)}`,
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }
-  )
-}
-
-export async function deleteEnvironment(name: string): Promise<void> {
-  const response = await fetch(
-    `${API_BASE}/api/environments/${encodeURIComponent(name)}`,
-    {
-      method: "DELETE",
-    }
-  )
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`)
-  }
-}
-
 export function runRoute(
   routeId: string,
   overrides?: RunRouteOverrides,

@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
-  createEnvironment,
-  deleteEnvironment,
   listRuns,
   getEnvironments,
   getEventsUrl,
   getRoutes,
   rerun,
   runRoute,
-  updateEnvironment,
   type EnvironmentConfig,
   type RunRouteOverrides,
   type RouteDefinition,
@@ -186,32 +183,6 @@ export function useWorkspace() {
     }
   }, [selectedRoute, activeBaseUrl, activeEnvironment])
 
-  const createEnvironmentConfig = useCallback(
-    async (payload: EnvironmentConfig) => {
-      await createEnvironment(payload)
-      await loadWorkspace()
-      setSelectedEnvironmentName(payload.name)
-    },
-    [loadWorkspace]
-  )
-
-  const updateEnvironmentConfig = useCallback(
-    async (previousName: string, payload: EnvironmentConfig) => {
-      await updateEnvironment(previousName, payload)
-      await loadWorkspace()
-      setSelectedEnvironmentName(payload.name)
-    },
-    [loadWorkspace]
-  )
-
-  const deleteEnvironmentConfig = useCallback(
-    async (name: string) => {
-      await deleteEnvironment(name)
-      await loadWorkspace()
-    },
-    [loadWorkspace]
-  )
-
   const rerunById = useCallback(async (runId: string) => {
     setIsRunning(true)
     setError("")
@@ -262,9 +233,6 @@ export function useWorkspace() {
     environments,
     selectedEnvironmentName: activeEnvironment,
     setSelectedEnvironmentName,
-    createEnvironmentConfig,
-    updateEnvironmentConfig,
-    deleteEnvironmentConfig,
     isLoading,
     isRunning,
     error,

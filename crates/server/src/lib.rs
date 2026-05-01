@@ -22,7 +22,6 @@ use serde_json::Value;
 use std::{
     collections::{BTreeMap, VecDeque},
     convert::Infallible,
-    fs,
     net::SocketAddr,
     path::PathBuf,
     sync::Arc,
@@ -72,11 +71,7 @@ pub async fn run_local_server(root_dir: PathBuf, base_url: String, addr: SocketA
     let app = Router::new()
         .route("/health", get(health))
         .route("/api/routes", get(list_routes))
-        .route("/api/environments", get(list_environments).post(create_environment))
-        .route(
-            "/api/environments/:name",
-            axum::routing::put(update_environment).delete(delete_environment),
-        )
+        .route("/api/environments", get(list_environments))
         .route("/api/run/:route_id", post(run_route_handler))
         .route("/api/runs", get(list_runs).post(run_with_payload_handler))
         .route("/api/runs/:run_id", get(get_run_detail))
@@ -108,37 +103,6 @@ async fn list_environments(State(state): State<Arc<AppState>>) -> Json<Vec<Envir
     Json(snapshot.environments)
 }
 
-async fn create_environment(
-    State(state): State<Arc<AppState>>,
-    Json(environment): Json<EnvironmentConfig>,
-) -> Result<Json<EnvironmentConfig>, axum::http::StatusCode> {
-    write_environment_file(&state.root_dir, &environment, None)
-        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
-    let _ = state.workspace_events.send(());
-    Ok(Json(environment))
-}
-
-async fn update_environment(
-    Path(name): Path<String>,
-    State(state): State<Arc<AppState>>,
-    Json(environment): Json<EnvironmentConfig>,
-) -> Result<Json<EnvironmentConfig>, axum::http::StatusCode> {
-    write_environment_file(&state.root_dir, &environment, Some(name))
-        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
-    let _ = state.workspace_events.send(());
-    Ok(Json(environment))
-}
-
-async fn delete_environment(
-    Path(name): Path<String>,
-    State(state): State<Arc<AppState>>,
-) -> Result<StatusCode, axum::http::StatusCode> {
-    let path = find_environment_file(&state.root_dir, &name)
-        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
-    fs::remove_file(path).map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
-    let _ = state.workspace_events.send(());
-    Ok(StatusCode::NO_CONTENT)
-}
 
 async fn run_route_handler(
     Path(route_id): Path<String>,
@@ -628,59 +592,3 @@ fn is_relevant_fs_event(kind: &EventKind) -> bool {
     )
 }
 
-fn environment_dir(root: &PathBuf) -> PathBuf {
-    root.join(".api").join("environments")
-}
-
-fn find_environment_file(root: &PathBuf, name: &str) -> Option<PathBuf> {
-    let dir = environment_dir(root);
-    if !dir.exists() {
-        return None;
-    }
-    let entries = fs::read_dir(&dir).ok()?;
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|value| value.to_str()) != Some("json") {
-            continue;
-        }
-        let Ok(content) = fs::read_to_string(&path) else {
-            continue;
-        };
-        let Ok(env) = serde_json::from_str::<EnvironmentConfig>(&content) else {
-            continue;
-        };
-        if env.name == name {
-            return Some(path);
-        }
-    }
-    None
-}
-
-fn write_environment_file(
-    root: &PathBuf,
-    environment: &EnvironmentConfig,
-    previous_name: Option<String>,
-) -> Result<()> {
-    let dir = environment_dir(root);
-    fs::create_dir_all(&dir)?;
-    if let Some(previous) = previous_name {
-        if previous != environment.name {
-            if let Some(old_file) = find_environment_file(root, &previous) {
-                let _ = fs::remove_file(old_file);
-            }
-        }
-    }
-
-    let target_file = find_environment_file(root, &environment.name).unwrap_or_else(|| {
-        let safe = environment
-            .name
-            .to_lowercase()
-            .chars()
-            .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
-            .collect::<String>();
-        dir.join(format!("{}.json", safe.trim_matches('-')))
-    });
-    let content = serde_json::to_string_pretty(environment)?;
-    fs::write(target_file, format!("{}\n", content))?;
-    Ok(())
-}

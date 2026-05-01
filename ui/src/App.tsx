@@ -26,15 +26,11 @@ export function App() {
     result,
     lastRunByRoute,
     syncToken,
-    sseConnected,
     timeline,
     clearTimeline,
     runSelectedRoute,
     rerunById,
     setSelectedEnvironmentName,
-    createEnvironmentConfig,
-    updateEnvironmentConfig,
-    deleteEnvironmentConfig,
   } = useWorkspace()
 
   return (
@@ -60,12 +56,6 @@ export function App() {
           activeEnvironment={activeEnvironment}
           environments={environments}
           onEnvironmentChange={setSelectedEnvironmentName}
-          onCreateEnvironment={(payload) => void createEnvironmentConfig(payload)}
-          onUpdateEnvironment={(previous, payload) =>
-            void updateEnvironmentConfig(previous, payload)
-          }
-          onDeleteEnvironment={(name) => void deleteEnvironmentConfig(name)}
-          sseConnected={sseConnected}
         />
         <section className="h-[calc(99vh-var(--header-height))]">
           {error && (
