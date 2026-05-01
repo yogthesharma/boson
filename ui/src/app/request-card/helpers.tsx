@@ -1,11 +1,39 @@
 import type { ReactNode } from "react"
 import type { RouteDefinition } from "@/api"
 
+export type RequestAssertion = RouteDefinition["tests"][number]
+export type RequestAuthConfig = NonNullable<RouteDefinition["auth"]>
+export type RequestVar = { key: string; value: string; enabled: boolean }
+export type MultipartField = { key: string; value: string; type: "text" | "file" }
+
+export type RequestTabState = {
+  method: string
+  url: string
+  params: Array<[string, string]>
+  headers: Array<[string, string]>
+  bodyText: string
+  assertions: RequestAssertion[]
+  auth: {
+    type: "none" | "basic" | "bearer" | "api_key"
+    username: string
+    password: string
+    token: string
+    apiKeyName: string
+    apiKeyValue: string
+    apiKeyAddTo: "header" | "query"
+  }
+  vars: RequestVar[]
+  script: { preRequest: string; postResponse: string }
+  docs: { summary: string; description: string }
+  file: { mode: "none" | "binary" | "multipart"; path: string; multipart: MultipartField[] }
+  settings: { timeoutMs: string; followRedirects: boolean; retryCount: string }
+}
+
 export function formatTestType(type: RouteDefinition["tests"][number]["type"]) {
   return type.replaceAll("_", " ")
 }
 
-export function describeTest(test: RouteDefinition["tests"][number]): ReactNode {
+export function describeTest(test: RequestAssertion): ReactNode {
   if (test.type === "status") {
     return (
       <>
@@ -90,4 +118,159 @@ export function updateQueryEntriesInPath(
     })
     .join("&")
   return `${base}?${query}`
+}
+
+export function normalizeEntryRows(
+  entries: Array<[string, string]>
+): Array<[string, string]> {
+  return entries.filter(
+    ([key, value]) => key.trim().length > 0 || value.trim().length > 0
+  )
+}
+
+export function normalizeVarRows(vars: RequestVar[]): RequestVar[] {
+  return vars
+    .map((item) => ({
+      key: item.key ?? "",
+      value: item.value ?? "",
+      enabled: item.enabled !== false,
+    }))
+    .filter(
+      (item) => item.key.trim().length > 0 || item.value.trim().length > 0
+    )
+}
+
+export function normalizeMultipartRows(rows: MultipartField[]): MultipartField[] {
+  return rows
+    .map((row) => ({
+      key: row.key ?? "",
+      value: row.value ?? "",
+      type: row.type === "file" ? "file" : "text",
+    }))
+    .filter((row) => row.key.trim().length > 0 || row.value.trim().length > 0)
+}
+
+export function getInitialRequestTabState(route: RouteDefinition): RequestTabState {
+  const params = normalizeEntryRows(extractQueryEntries(route.path))
+  const headers = normalizeEntryRows(
+    Object.entries(route.headers ?? {}).map(([key, value]) => [key, value] as [
+      string,
+      string,
+    ])
+  )
+  const auth = route.auth ?? {}
+  const vars = normalizeVarRows(
+    (route.vars ?? []).map((item) => ({
+      key: item.key,
+      value: item.value,
+      enabled: item.enabled !== false,
+    }))
+  )
+  const multipart = normalizeMultipartRows(
+    (route.file?.multipart ?? []).map((item) => ({
+      key: item.key,
+      value: item.value ?? "",
+      type: item.type === "file" ? "file" : "text",
+    }))
+  )
+
+  return {
+    method: route.method.toUpperCase(),
+    url: route.path,
+    params,
+    headers,
+    bodyText: route.body ? JSON.stringify(route.body, null, 2) : "",
+    assertions: route.tests ?? [],
+    auth: {
+      type: auth.type ?? "none",
+      username: auth.basic?.username ?? "",
+      password: auth.basic?.password ?? "",
+      token: auth.bearer?.token ?? "",
+      apiKeyName: auth.api_key?.key ?? "",
+      apiKeyValue: auth.api_key?.value ?? "",
+      apiKeyAddTo: auth.api_key?.add_to === "query" ? "query" : "header",
+    },
+    vars,
+    script: {
+      preRequest: route.script?.pre_request ?? "",
+      postResponse: route.script?.post_response ?? "",
+    },
+    docs: {
+      summary: route.docs?.summary ?? "",
+      description: route.docs?.description ?? "",
+    },
+    file: {
+      mode:
+        route.file?.mode === "binary" || route.file?.mode === "multipart"
+          ? route.file.mode
+          : "none",
+      path: route.file?.path ?? "",
+      multipart,
+    },
+    settings: {
+      timeoutMs:
+        route.settings?.timeout_ms !== undefined
+          ? String(route.settings.timeout_ms)
+          : "",
+      followRedirects: route.settings?.follow_redirects !== false,
+      retryCount:
+        route.settings?.retry_count !== undefined
+          ? String(route.settings.retry_count)
+          : "",
+    },
+  }
+}
+
+export function withUpdatedParams(
+  state: RequestTabState,
+  nextParams: Array<[string, string]>
+): RequestTabState {
+  const cleaned = normalizeEntryRows(nextParams)
+  return {
+    ...state,
+    params: cleaned,
+    url: updateQueryEntriesInPath(state.url, cleaned),
+  }
+}
+
+export function withUpdatedUrl(
+  state: RequestTabState,
+  nextUrl: string
+): RequestTabState {
+  return {
+    ...state,
+    url: nextUrl,
+    params: normalizeEntryRows(extractQueryEntries(nextUrl)),
+  }
+}
+
+export function withUpdatedHeaders(
+  state: RequestTabState,
+  nextHeaders: Array<[string, string]>
+): RequestTabState {
+  return { ...state, headers: normalizeEntryRows(nextHeaders) }
+}
+
+export function withUpdatedVars(
+  state: RequestTabState,
+  nextVars: RequestVar[]
+): RequestTabState {
+  return { ...state, vars: normalizeVarRows(nextVars) }
+}
+
+export function withUpdatedMultipart(
+  state: RequestTabState,
+  nextRows: MultipartField[]
+): RequestTabState {
+  return { ...state, file: { ...state.file, multipart: normalizeMultipartRows(nextRows) } }
+}
+
+export function toStateFingerprint(state: RequestTabState): string {
+  return JSON.stringify({
+    ...state,
+    params: normalizeEntryRows(state.params),
+    headers: normalizeEntryRows(state.headers),
+    vars: normalizeVarRows(state.vars),
+    file: { ...state.file, multipart: normalizeMultipartRows(state.file.multipart) },
+  })
 }

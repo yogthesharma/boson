@@ -5,6 +5,7 @@ import {
   getRoutes,
   runRoute,
   type EnvironmentConfig,
+  type RunRouteOverrides,
   type RouteDefinition,
   type RunResult,
 } from "@/api"
@@ -90,22 +91,24 @@ export function useWorkspace() {
   const activeEnvironment = environments[0]?.name ?? "local"
   const activeBaseUrl = environments[0]?.variables?.base_url ?? "http://127.0.0.1:8787"
 
-  const runSelectedRoute = useCallback(async () => {
+  const runSelectedRoute = useCallback(async (overrides?: RunRouteOverrides) => {
     if (!selectedRoute) return
     setIsRunning(true)
     setError("")
     try {
-      const runResult = await runRoute(selectedRoute.id)
+      const runResult = await runRoute(selectedRoute.id, overrides)
       setResult(runResult)
-      const requestUrl = selectedRoute.path.startsWith("http")
-        ? selectedRoute.path
-        : `${activeBaseUrl.replace(/\/$/, "")}${selectedRoute.path}`
+      const effectivePath = overrides?.path ?? selectedRoute.path
+      const effectiveMethod = (overrides?.method ?? selectedRoute.method).toUpperCase()
+      const requestUrl = effectivePath.startsWith("http")
+        ? effectivePath
+        : `${activeBaseUrl.replace(/\/$/, "")}${effectivePath}`
       setTimeline((current) => [
         {
           id: crypto.randomUUID(),
           routeId: selectedRoute.id,
           routeName: selectedRoute.name,
-          method: selectedRoute.method.toUpperCase(),
+          method: effectiveMethod,
           path: requestUrl,
           statusText: `${runResult.status} ${runResult.status < 400 ? "OK" : "Error"}`,
           ok: runResult.status < 400,
@@ -120,15 +123,17 @@ export function useWorkspace() {
       }))
     } catch (err) {
       setError(err instanceof Error ? err.message : "Run failed")
-      const requestUrl = selectedRoute.path.startsWith("http")
-        ? selectedRoute.path
-        : `${activeBaseUrl.replace(/\/$/, "")}${selectedRoute.path}`
+      const effectivePath = overrides?.path ?? selectedRoute.path
+      const effectiveMethod = (overrides?.method ?? selectedRoute.method).toUpperCase()
+      const requestUrl = effectivePath.startsWith("http")
+        ? effectivePath
+        : `${activeBaseUrl.replace(/\/$/, "")}${effectivePath}`
       setTimeline((current) => [
         {
           id: crypto.randomUUID(),
           routeId: selectedRoute.id,
           routeName: selectedRoute.name,
-          method: selectedRoute.method.toUpperCase(),
+          method: effectiveMethod,
           path: requestUrl,
           statusText: "RUN_FAILED",
           ok: false,

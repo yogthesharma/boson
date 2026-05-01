@@ -1,7 +1,6 @@
 import type * as React from "react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Funnel, MagnifyingGlass } from "@phosphor-icons/react"
-import { Badge } from "@/components/ui/badge"
 import { BosonLogo } from "@/components/boson-logo"
 import { Button } from "@/components/ui/button"
 import {
@@ -16,7 +15,6 @@ import {
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarHeader,
@@ -58,7 +56,7 @@ export function AppSidebar({
   syncToken,
   ...props
 }: AppSidebarProps) {
-  const [search, setSearch] = useState("")
+  const [commandSearch, setCommandSearch] = useState("")
   const [openSearch, setOpenSearch] = useState(false)
   const [methodFilter, setMethodFilter] = useState<string>("all")
   const [groupFilter, setGroupFilter] = useState<string>("all")
@@ -67,13 +65,21 @@ export function AppSidebar({
     () => readExpandedState()
   )
 
-  const filteredRoutes = useMemo(
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault()
+        setOpenSearch(true)
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [])
+
+  const sidebarRoutes = useMemo(
     () =>
       routes.filter((route) => {
-        const query = search.trim().toLowerCase()
-        const searchHaystack =
-          `${route.name} ${route.path} ${route.method} ${route.group ?? ""} ${route.source_path ?? ""}`.toLowerCase()
-        if (query && !searchHaystack.includes(query)) return false
         if (
           methodFilter !== "all" &&
           route.method.toUpperCase() !== methodFilter
@@ -87,10 +93,22 @@ export function AppSidebar({
         if (failedOnly && lastRunByRoute[route.id] !== "failed") return false
         return true
       }),
-    [routes, search, methodFilter, groupFilter, failedOnly, lastRunByRoute]
+    [routes, methodFilter, groupFilter, failedOnly, lastRunByRoute]
   )
 
-  const tree = useMemo(() => buildRouteTree(filteredRoutes), [filteredRoutes])
+  const tree = useMemo(() => buildRouteTree(sidebarRoutes), [sidebarRoutes])
+  const commandRoutes = useMemo(
+    () =>
+      sidebarRoutes.filter((route) => {
+        const query = commandSearch.trim().toLowerCase()
+        if (!query) return true
+        const haystack =
+          `${route.name} ${route.path} ${route.method} ${route.group ?? ""} ${route.source_path ?? ""}`.toLowerCase()
+        return haystack.includes(query)
+      }),
+    [sidebarRoutes, commandSearch]
+  )
+  const commandTree = useMemo(() => buildRouteTree(commandRoutes), [commandRoutes])
   const collectionOptions = useMemo(
     () =>
       Array.from(
@@ -105,6 +123,17 @@ export function AppSidebar({
       ).sort(),
     [routes]
   )
+  const routeResults = useMemo(
+    () => commandTree.flatMap((branch) => flattenLeafRoutes(branch)),
+    [commandTree]
+  )
+  const activeFilterCount = useMemo(() => {
+    let count = 0
+    if (methodFilter !== "all") count += 1
+    if (groupFilter !== "all") count += 1
+    if (failedOnly) count += 1
+    return count
+  }, [methodFilter, groupFilter, failedOnly])
 
   const togglePath = (path: string) => {
     setExpandedPaths((current) => {
@@ -188,14 +217,26 @@ export function AppSidebar({
         onOpenChange={setOpenSearch}
         title="Search routes"
         description="Find and jump to routes quickly."
+        className="sm:max-w-2xl"
       >
         <Command>
           <CommandInput
-            placeholder="Search routes..."
-            value={search}
-            onValueChange={setSearch}
+            placeholder="Search routes (Cmd/Ctrl + K)..."
+            value={commandSearch}
+            onValueChange={setCommandSearch}
           />
-          <CommandList>
+          <div className="mx-1 mt-1 flex items-center justify-between rounded-md border border-sidebar-border/70 bg-sidebar-accent/40 px-2.5 py-1.5 text-[11px] text-sidebar-foreground/70">
+            <span>
+              {routeResults.length} result{routeResults.length === 1 ? "" : "s"}{" "}
+              / {routes.length} total routes
+            </span>
+            <span>
+              {activeFilterCount > 0
+                ? `${activeFilterCount} filter${activeFilterCount === 1 ? "" : "s"} active`
+                : "No filters active"}
+            </span>
+          </div>
+          <CommandList className="max-h-[50vh]">
             <CommandEmpty>No matching routes.</CommandEmpty>
             <CommandGroup heading="Filters">
               <CommandItem onSelect={() => setFailedOnly((v) => !v)}>
@@ -232,23 +273,40 @@ export function AppSidebar({
                 </CommandItem>
               ))}
             </CommandGroup>
-            {tree.map((branch) => (
+            {commandTree.map((branch) => (
               <CommandGroup key={branch.path} heading={branch.label}>
                 {flattenLeafRoutes(branch).map((route) => (
                   <CommandItem
                     key={route.id}
                     value={`${route.name} ${route.path} ${route.method} ${route.id}`}
+                    className="items-start gap-2.5 py-2"
                     onSelect={() => {
                       onSelectRoute(route.id)
                       setOpenSearch(false)
                     }}
                   >
-                    <span className="truncate">{route.name}</span>
-                    <span
-                      className={`ml-auto text-[10px] ${methodClass(route.method)}`}
-                    >
-                      {route.method.toUpperCase()}
-                    </span>
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate font-medium">{route.name}</span>
+                        <span
+                          className={`shrink-0 text-[10px] ${methodClass(route.method)}`}
+                        >
+                          {route.method.toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="truncate text-[11px] text-sidebar-foreground/70">
+                        {route.path}
+                      </div>
+                      <div className="flex items-center gap-3 text-[10px] text-sidebar-foreground/55">
+                        <span>Group: {route.group?.trim() || "Ungrouped"}</span>
+                        <span>
+                          Status: {lastRunByRoute[route.id] ?? "not run"}
+                        </span>
+                        {route.source_path && (
+                          <span className="truncate">File: {route.source_path}</span>
+                        )}
+                      </div>
+                    </div>
                   </CommandItem>
                 ))}
               </CommandGroup>

@@ -27,7 +27,11 @@ pub async fn run_route(
     route: &RouteDefinition,
     _environment: &EnvironmentConfig,
 ) -> Result<RunResult> {
-    let url = format!("{}{}", base_url.trim_end_matches('/'), route.path.as_str());
+    let url = if route.path.starts_with("http://") || route.path.starts_with("https://") {
+        route.path.clone()
+    } else {
+        format!("{}{}", base_url.trim_end_matches('/'), route.path.as_str())
+    };
     let method = route.method.parse()?;
     let mut request = client.request(method, url);
 

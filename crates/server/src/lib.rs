@@ -13,11 +13,13 @@ use axum::{
 use boson_core::{
     execution::{run_route, RunResult},
     loader::load_workspace,
-    schema::{EnvironmentConfig, RouteDefinition, WorkspaceSnapshot},
+    schema::{EnvironmentConfig, RouteDefinition, RouteTest, RouteVar, WorkspaceSnapshot},
 };
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use reqwest::Client;
-use std::{convert::Infallible, net::SocketAddr, path::PathBuf, sync::Arc};
+use serde::Deserialize;
+use serde_json::Value;
+use std::{collections::BTreeMap, convert::Infallible, net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
@@ -78,6 +80,7 @@ async fn list_environments(State(state): State<Arc<AppState>>) -> Json<Vec<Envir
 async fn run_route_handler(
     Path(route_id): Path<String>,
     State(state): State<Arc<AppState>>,
+    body: Option<Json<RunRouteRequest>>,
 ) -> Result<Json<RunResult>, axum::http::StatusCode> {
     let snapshot = read_snapshot(&state).map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
     let route = snapshot
@@ -85,6 +88,11 @@ async fn run_route_handler(
         .iter()
         .find(|item| item.id == route_id)
         .ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    let route = if let Some(Json(request)) = body {
+        apply_run_overrides(route, request)
+    } else {
+        route.clone()
+    };
 
     let env = snapshot
         .environments
@@ -100,10 +108,163 @@ async fn run_route_handler(
         .map(String::as_str)
         .unwrap_or(&state.base_url);
 
-    let result = run_route(&state.http_client, base_url, route, env)
+    let result = run_route(&state.http_client, base_url, &route, env)
         .await
         .map_err(|_| axum::http::StatusCode::BAD_GATEWAY)?;
     Ok(Json(result))
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RunRouteRequest {
+    #[serde(default)]
+    method: Option<String>,
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default)]
+    headers: Option<BTreeMap<String, String>>,
+    #[serde(default)]
+    body: Option<Value>,
+    #[serde(default)]
+    tests: Option<Vec<RouteTest>>,
+    #[serde(default)]
+    auth: Option<RunAuthConfig>,
+    #[serde(default)]
+    vars: Option<Vec<RouteVar>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RunAuthConfig {
+    #[serde(default)]
+    r#type: Option<String>,
+    #[serde(default)]
+    basic: Option<RunBasicAuth>,
+    #[serde(default)]
+    bearer: Option<RunBearerAuth>,
+    #[serde(default)]
+    api_key: Option<RunApiKeyAuth>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RunBasicAuth {
+    #[serde(default)]
+    username: Option<String>,
+    #[serde(default)]
+    password: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RunBearerAuth {
+    #[serde(default)]
+    token: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RunApiKeyAuth {
+    #[serde(default)]
+    key: Option<String>,
+    #[serde(default)]
+    value: Option<String>,
+    #[serde(default)]
+    add_to: Option<String>,
+}
+
+fn apply_run_overrides(route: &RouteDefinition, request: RunRouteRequest) -> RouteDefinition {
+    let mut next = route.clone();
+    if let Some(method) = request.method {
+        next.method = method.to_uppercase();
+    }
+    if let Some(path) = request.path {
+        next.path = path;
+    }
+    if let Some(headers) = request.headers {
+        next.headers = headers;
+    }
+    if let Some(body) = request.body {
+        next.body = Some(body);
+    }
+    if let Some(tests) = request.tests {
+        next.tests = tests;
+    }
+
+    let vars = request.vars.unwrap_or_default();
+    if !vars.is_empty() {
+        for var in vars {
+            if var.enabled == Some(false) {
+                continue;
+            }
+            let token = format!("{{{{{}}}}}", var.key);
+            next.path = next.path.replace(&token, &var.value);
+            for value in next.headers.values_mut() {
+                *value = value.replace(&token, &var.value);
+            }
+            if let Some(body) = &mut next.body {
+                replace_json_tokens(body, &token, &var.value);
+            }
+        }
+    }
+
+    if let Some(auth) = request.auth {
+        let auth_type = auth.r#type.unwrap_or_else(|| "none".to_string());
+        match auth_type.as_str() {
+            "basic" => {
+                if let Some(basic) = auth.basic {
+                    if let (Some(username), Some(password)) = (basic.username, basic.password) {
+                        use base64::engine::general_purpose::STANDARD;
+                        use base64::Engine;
+                        let encoded = STANDARD.encode(format!("{}:{}", username, password));
+                        next.headers
+                            .insert("Authorization".to_string(), format!("Basic {}", encoded));
+                    }
+                }
+            }
+            "bearer" => {
+                if let Some(bearer) = auth.bearer {
+                    if let Some(token) = bearer.token {
+                        if !token.trim().is_empty() {
+                            next.headers
+                                .insert("Authorization".to_string(), format!("Bearer {}", token));
+                        }
+                    }
+                }
+            }
+            "api_key" => {
+                if let Some(api_key) = auth.api_key {
+                    let key = api_key.key.unwrap_or_default();
+                    let value = api_key.value.unwrap_or_default();
+                    if !key.is_empty() {
+                        if api_key.add_to.as_deref() == Some("query") {
+                            let separator = if next.path.contains('?') { "&" } else { "?" };
+                            next.path = format!("{}{}{}={}", next.path, separator, key, value);
+                        } else {
+                            next.headers.insert(key, value);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    next
+}
+
+fn replace_json_tokens(value: &mut Value, token: &str, replacement: &str) {
+    match value {
+        Value::String(current) => {
+            *current = current.replace(token, replacement);
+        }
+        Value::Array(items) => {
+            for item in items {
+                replace_json_tokens(item, token, replacement);
+            }
+        }
+        Value::Object(map) => {
+            for item in map.values_mut() {
+                replace_json_tokens(item, token, replacement);
+            }
+        }
+        _ => {}
+    }
 }
 
 async fn events_handler(

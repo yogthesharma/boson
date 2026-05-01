@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge"
 import { TabsContent } from "@/components/ui/tabs"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Table,
   TableBody,
@@ -13,9 +14,11 @@ import { describeTest, formatTestType } from "./helpers"
 
 type TestsPanelProps = {
   tests: RouteDefinition["tests"]
+  onTestsChange: (tests: RouteDefinition["tests"]) => void
 }
 
-export function TestsPanel({ tests }: TestsPanelProps) {
+export function TestsPanel({ tests, onTestsChange }: TestsPanelProps) {
+  const serialized = JSON.stringify(tests, null, 2)
   return (
     <TabsContent value="tests" className="mt-1 flex min-h-0 flex-1 px-2 pb-2">
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-md">
@@ -59,6 +62,28 @@ export function TestsPanel({ tests }: TestsPanelProps) {
               ))}
             </TableBody>
           </Table>
+          <div className="px-3 py-2">
+            <p className="mb-1 text-xs text-muted-foreground">Assertion JSON</p>
+            <Textarea
+              value={serialized}
+              onChange={(event) => {
+                const value = event.target.value.trim()
+                if (!value) {
+                  onTestsChange([])
+                  return
+                }
+                try {
+                  const parsed = JSON.parse(value) as RouteDefinition["tests"]
+                  if (Array.isArray(parsed)) {
+                    onTestsChange(parsed)
+                  }
+                } catch {
+                  // keep draft text permissive; apply only on valid JSON
+                }
+              }}
+              className="min-h-48 font-mono text-xs"
+            />
+          </div>
         </div>
       </div>
     </TabsContent>

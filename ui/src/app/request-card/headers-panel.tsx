@@ -1,4 +1,7 @@
 import { TabsContent } from "@/components/ui/tabs"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Table,
   TableBody,
@@ -7,53 +10,121 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useMemo, useState } from "react"
+import { normalizeEntryRows } from "./helpers"
 
 type HeadersPanelProps = {
   headers: Array<[string, string]>
+  onHeadersChange: (headers: Array<[string, string]>) => void
 }
 
-export function HeadersPanel({ headers }: HeadersPanelProps) {
+function toBulk(entries: Array<[string, string]>): string {
+  return entries.map(([k, v]) => `${k}: ${v}`).join("\n")
+}
+
+function fromBulk(value: string): Array<[string, string]> {
+  return normalizeEntryRows(
+    value
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const idx = line.indexOf(":")
+        if (idx < 0) return [line, ""] as [string, string]
+        return [line.slice(0, idx).trim(), line.slice(idx + 1).trim()] as [
+          string,
+          string,
+        ]
+      })
+  )
+}
+
+export function HeadersPanel({ headers, onHeadersChange }: HeadersPanelProps) {
+  const [mode, setMode] = useState<"table" | "bulk">("table")
+  const displayRows = useMemo(() => [...headers, ["", ""] as [string, string]], [headers])
+
+  function onRowChange(index: number, field: "key" | "value", value: string) {
+    const isNew = index >= headers.length
+    const current = headers[index] ?? ["", ""]
+    if (isNew && !value.trim()) return
+    const next = isNew
+      ? [...headers, (field === "key" ? [value, ""] : ["", value])]
+      : headers.map((entry, i) =>
+          i === index
+            ? (field === "key" ? [value, entry[1]] : [entry[0], value])
+            : entry
+        )
+    const cleaned = normalizeEntryRows(next as Array<[string, string]>)
+    onHeadersChange(cleaned)
+  }
+
   return (
     <TabsContent value="headers" className="mt-1 flex min-h-0 flex-1 px-2 pb-2">
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-md">
         <div className="min-h-0 flex-1 overflow-auto">
-          <Table>
-            <TableHeader className="[&_tr]:border-0">
-              <TableRow className="border-0 bg-muted/30 hover:bg-muted/30">
-                <TableHead className="h-auto px-3 py-2 text-xs text-muted-foreground">
-                  Header
-                </TableHead>
-                <TableHead className="h-auto px-3 py-2 text-xs text-muted-foreground">
-                  Value
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody className="[&_tr:last-child]:border-0">
-              {headers.length === 0 && (
-                <TableRow className="border-0 hover:bg-transparent">
-                  <TableCell
-                    colSpan={2}
-                    className="px-3 py-3 text-sm text-muted-foreground"
+          {mode === "table" ? (
+            <Table>
+              <TableHeader className="[&_tr]:border-0">
+                <TableRow className="border-0 bg-muted/30 hover:bg-muted/30">
+                  <TableHead className="h-auto px-3 py-2 text-xs text-muted-foreground">
+                    Header
+                  </TableHead>
+                  <TableHead className="h-auto px-3 py-2 text-xs text-muted-foreground">
+                    Value
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="[&_tr:last-child]:border-0">
+                {displayRows.map(([key, value], index) => (
+                  <TableRow
+                    key={`header-${index}`}
+                    className="border-0 odd:bg-muted/10 even:bg-background hover:bg-muted/20"
                   >
-                    No custom headers.
-                  </TableCell>
-                </TableRow>
-              )}
-              {headers.map(([key, value]) => (
-                <TableRow
-                  key={key}
-                  className="border-0 odd:bg-muted/10 even:bg-background hover:bg-muted/20"
-                >
-                  <TableCell className="px-3 py-2 font-mono text-xs text-foreground/90">
-                    {key}
-                  </TableCell>
-                  <TableCell className="px-3 py-2 font-mono text-xs text-foreground/80">
-                    {value}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                    <TableCell className="px-3 py-2">
+                      <Input
+                        value={key}
+                        onChange={(event) =>
+                          onRowChange(index, "key", event.target.value)
+                        }
+                        className="h-7 rounded-md border-border/50 !bg-transparent font-mono text-xs"
+                        placeholder="Header"
+                      />
+                    </TableCell>
+                    <TableCell className="px-3 py-2">
+                      <Input
+                        value={value}
+                        onChange={(event) =>
+                          onRowChange(index, "value", event.target.value)
+                        }
+                        className="h-7 rounded-md border-border/50 !bg-transparent font-mono text-xs"
+                        placeholder="Value"
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="px-3 py-2">
+              <Textarea
+                value={toBulk(headers)}
+                onChange={(event) => onHeadersChange(fromBulk(event.target.value))}
+                className="min-h-64 font-mono text-xs"
+                placeholder="Header-One: value"
+              />
+            </div>
+          )}
+        </div>
+        <div className="px-3 py-2 text-right">
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            className="h-6 px-0 text-xs"
+            onClick={() => setMode((value) => (value === "table" ? "bulk" : "table"))}
+          >
+            {mode === "table" ? "Bulk Edit" : "Table Edit"}
+          </Button>
         </div>
       </div>
     </TabsContent>

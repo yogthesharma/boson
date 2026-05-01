@@ -68,7 +68,7 @@ export function App() {
                 <RequestPreviewCard
                   selectedRoute={selectedRoute}
                   isRunning={isRunning}
-                  onRun={() => void runSelectedRoute()}
+                  onRun={(overrides) => void runSelectedRoute(overrides)}
                 />
               </ResizablePanel>
               <ResizableHandle withHandle />
